@@ -2,6 +2,11 @@
 
 This repository stores installable modules consumed by `templatectl`.
 
+## Related Repositories
+
+- Modules repo (this project): [Dolyyyy/huma_golang_api_template_modules](https://github.com/Dolyyyy/huma_golang_api_template_modules)
+- Base template repo: [Dolyyyy/huma_golang_api_template](https://github.com/Dolyyyy/huma_golang_api_template)
+
 ## Layout
 
 The repository includes:
