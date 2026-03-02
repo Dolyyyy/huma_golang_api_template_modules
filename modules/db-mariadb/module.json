@@ -1,0 +1,30 @@
+{
+  "id": "db-mariadb",
+  "name": "MariaDB connector",
+  "description": "Add MariaDB connector and /db/mariadb/ping endpoint.",
+  "package": "internal/modules/db_mariadb",
+  "defaults": {
+    "MARIADB_HOST": "127.0.0.1",
+    "MARIADB_PORT": "3306",
+    "MARIADB_DB": "app",
+    "MARIADB_USER": "root",
+    "MARIADB_PASSWORD": "root",
+    "MARIADB_PARAMS": "parseTime=true",
+    "MARIADB_CONNECT_TIMEOUT_SEC": "5"
+  },
+  "cleanup_env_keys": [
+    "MARIADB_HOST",
+    "MARIADB_PORT",
+    "MARIADB_DB",
+    "MARIADB_USER",
+    "MARIADB_PASSWORD",
+    "MARIADB_PARAMS",
+    "MARIADB_CONNECT_TIMEOUT_SEC"
+  ],
+  "files": [
+    {
+      "source": "files/module.go.tmpl",
+      "destination": "internal/modules/db_mariadb/module.go"
+    }
+  ]
+}

@@ -1,0 +1,131 @@
+package db_postgres
+
+import (
+	"context"
+	"database/sql"
+	"encoding/json"
+	"fmt"
+	"net/http"
+	"os"
+	"strconv"
+	"strings"
+	"time"
+
+	"github.com/go-chi/chi/v5"
+	_ "github.com/lib/pq"
+
+	"{{ .ProjectModulePath }}/internal/modulekit"
+)
+
+type pingResponse struct {
+	OK     bool   `json:"ok"`
+	Driver string `json:"driver"`
+	Detail string `json:"detail"`
+	Error  string `json:"error,omitempty"`
+}
+
+func init() {
+	modulekit.Register(modulekit.Definition{
+		ID:          "db-postgres",
+		Name:        "PostgreSQL connector",
+		Description: "Add PostgreSQL connector and /db/postgres/ping endpoint.",
+		Routes:      registerRoutes,
+	})
+}
+
+func registerRoutes(router chi.Router) {
+	router.Get("/db/postgres/ping", pingHandler)
+}
+
+func pingHandler(w http.ResponseWriter, r *http.Request) {
+	ctx, cancel := context.WithTimeout(r.Context(), connectTimeout())
+	defer cancel()
+
+	db, err := openDatabase()
+	if err != nil {
+		respondJSON(w, http.StatusServiceUnavailable, pingResponse{
+			OK:     false,
+			Driver: "postgres",
+			Detail: "PostgreSQL connection failed.",
+			Error:  err.Error(),
+		})
+		return
+	}
+	defer db.Close()
+
+	if err := db.PingContext(ctx); err != nil {
+		respondJSON(w, http.StatusServiceUnavailable, pingResponse{
+			OK:     false,
+			Driver: "postgres",
+			Detail: "PostgreSQL ping failed.",
+			Error:  err.Error(),
+		})
+		return
+	}
+
+	respondJSON(w, http.StatusOK, pingResponse{
+		OK:     true,
+		Driver: "postgres",
+		Detail: "PostgreSQL ping successful.",
+	})
+}
+
+func openDatabase() (*sql.DB, error) {
+	db, err := sql.Open("postgres", buildDSN())
+	if err != nil {
+		return nil, err
+	}
+
+	db.SetConnMaxLifetime(30 * time.Minute)
+	db.SetMaxIdleConns(5)
+	db.SetMaxOpenConns(20)
+
+	return db, nil
+}
+
+func buildDSN() string {
+	host := envOrDefault("POSTGRES_HOST", "127.0.0.1")
+	port := envOrDefault("POSTGRES_PORT", "5432")
+	name := envOrDefault("POSTGRES_DB", "app")
+	user := envOrDefault("POSTGRES_USER", "postgres")
+	password := envOrDefault("POSTGRES_PASSWORD", "postgres")
+	sslmode := envOrDefault("POSTGRES_SSLMODE", "disable")
+
+	return fmt.Sprintf(
+		"host=%s port=%s user=%s password=%s dbname=%s sslmode=%s",
+		host,
+		port,
+		user,
+		password,
+		name,
+		sslmode,
+	)
+}
+
+func connectTimeout() time.Duration {
+	value := strings.TrimSpace(os.Getenv("POSTGRES_CONNECT_TIMEOUT_SEC"))
+	if value == "" {
+		return 5 * time.Second
+	}
+
+	seconds, err := strconv.Atoi(value)
+	if err != nil || seconds <= 0 {
+		return 5 * time.Second
+	}
+
+	return time.Duration(seconds) * time.Second
+}
+
+func envOrDefault(key, fallback string) string {
+	value := strings.TrimSpace(os.Getenv(key))
+	if value == "" {
+		return fallback
+	}
+	return value
+}
+
+func respondJSON(w http.ResponseWriter, statusCode int, payload pingResponse) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(statusCode)
+	_ = json.NewEncoder(w).Encode(payload)
+}

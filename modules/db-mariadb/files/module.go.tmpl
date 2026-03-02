@@ -1,0 +1,128 @@
+package db_mariadb
+
+import (
+	"context"
+	"database/sql"
+	"encoding/json"
+	"fmt"
+	"net/http"
+	"os"
+	"strconv"
+	"strings"
+	"time"
+
+	"github.com/go-chi/chi/v5"
+	_ "github.com/go-sql-driver/mysql"
+
+	"{{ .ProjectModulePath }}/internal/modulekit"
+)
+
+type pingResponse struct {
+	OK     bool   `json:"ok"`
+	Driver string `json:"driver"`
+	Detail string `json:"detail"`
+	Error  string `json:"error,omitempty"`
+}
+
+func init() {
+	modulekit.Register(modulekit.Definition{
+		ID:          "db-mariadb",
+		Name:        "MariaDB connector",
+		Description: "Add MariaDB connector and /db/mariadb/ping endpoint.",
+		Routes:      registerRoutes,
+	})
+}
+
+func registerRoutes(router chi.Router) {
+	router.Get("/db/mariadb/ping", pingHandler)
+}
+
+func pingHandler(w http.ResponseWriter, r *http.Request) {
+	ctx, cancel := context.WithTimeout(r.Context(), connectTimeout())
+	defer cancel()
+
+	db, err := openDatabase()
+	if err != nil {
+		respondJSON(w, http.StatusServiceUnavailable, pingResponse{
+			OK:     false,
+			Driver: "mariadb",
+			Detail: "MariaDB connection failed.",
+			Error:  err.Error(),
+		})
+		return
+	}
+	defer db.Close()
+
+	if err := db.PingContext(ctx); err != nil {
+		respondJSON(w, http.StatusServiceUnavailable, pingResponse{
+			OK:     false,
+			Driver: "mariadb",
+			Detail: "MariaDB ping failed.",
+			Error:  err.Error(),
+		})
+		return
+	}
+
+	respondJSON(w, http.StatusOK, pingResponse{
+		OK:     true,
+		Driver: "mariadb",
+		Detail: "MariaDB ping successful.",
+	})
+}
+
+func openDatabase() (*sql.DB, error) {
+	db, err := sql.Open("mysql", buildDSN())
+	if err != nil {
+		return nil, err
+	}
+
+	db.SetConnMaxLifetime(30 * time.Minute)
+	db.SetMaxIdleConns(5)
+	db.SetMaxOpenConns(20)
+
+	return db, nil
+}
+
+func buildDSN() string {
+	host := envOrDefault("MARIADB_HOST", "127.0.0.1")
+	port := envOrDefault("MARIADB_PORT", "3306")
+	name := envOrDefault("MARIADB_DB", "app")
+	user := envOrDefault("MARIADB_USER", "root")
+	password := envOrDefault("MARIADB_PASSWORD", "root")
+	params := envOrDefault("MARIADB_PARAMS", "parseTime=true")
+
+	base := fmt.Sprintf("%s:%s@tcp(%s:%s)/%s", user, password, host, port, name)
+	if strings.TrimSpace(params) == "" {
+		return base
+	}
+
+	return base + "?" + params
+}
+
+func connectTimeout() time.Duration {
+	value := strings.TrimSpace(os.Getenv("MARIADB_CONNECT_TIMEOUT_SEC"))
+	if value == "" {
+		return 5 * time.Second
+	}
+
+	seconds, err := strconv.Atoi(value)
+	if err != nil || seconds <= 0 {
+		return 5 * time.Second
+	}
+
+	return time.Duration(seconds) * time.Second
+}
+
+func envOrDefault(key, fallback string) string {
+	value := strings.TrimSpace(os.Getenv(key))
+	if value == "" {
+		return fallback
+	}
+	return value
+}
+
+func respondJSON(w http.ResponseWriter, statusCode int, payload pingResponse) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(statusCode)
+	_ = json.NewEncoder(w).Encode(payload)
+}

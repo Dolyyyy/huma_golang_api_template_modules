@@ -1,0 +1,30 @@
+{
+  "id": "db-postgres",
+  "name": "PostgreSQL connector",
+  "description": "Add PostgreSQL connector and /db/postgres/ping endpoint.",
+  "package": "internal/modules/db_postgres",
+  "defaults": {
+    "POSTGRES_HOST": "127.0.0.1",
+    "POSTGRES_PORT": "5432",
+    "POSTGRES_DB": "app",
+    "POSTGRES_USER": "postgres",
+    "POSTGRES_PASSWORD": "postgres",
+    "POSTGRES_SSLMODE": "disable",
+    "POSTGRES_CONNECT_TIMEOUT_SEC": "5"
+  },
+  "cleanup_env_keys": [
+    "POSTGRES_HOST",
+    "POSTGRES_PORT",
+    "POSTGRES_DB",
+    "POSTGRES_USER",
+    "POSTGRES_PASSWORD",
+    "POSTGRES_SSLMODE",
+    "POSTGRES_CONNECT_TIMEOUT_SEC"
+  ],
+  "files": [
+    {
+      "source": "files/module.go.tmpl",
+      "destination": "internal/modules/db_postgres/module.go"
+    }
+  ]
+}

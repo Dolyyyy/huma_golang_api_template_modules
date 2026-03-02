@@ -6,6 +6,24 @@
     "package": "internal/modules/auth_token"
   },
   {
+    "id": "db-mariadb",
+    "name": "MariaDB connector",
+    "description": "Add MariaDB connector and /db/mariadb/ping endpoint.",
+    "package": "internal/modules/db_mariadb"
+  },
+  {
+    "id": "db-postgres",
+    "name": "PostgreSQL connector",
+    "description": "Add PostgreSQL connector and /db/postgres/ping endpoint.",
+    "package": "internal/modules/db_postgres"
+  },
+  {
+    "id": "db-sqlite",
+    "name": "SQLite connector",
+    "description": "Add SQLite connector and /db/sqlite/ping endpoint.",
+    "package": "internal/modules/db_sqlite"
+  },
+  {
     "id": "metrics-prometheus",
     "name": "Prometheus metrics",
     "description": "Expose /metrics for Prometheus scraping.",

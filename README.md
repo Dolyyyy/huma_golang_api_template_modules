@@ -12,6 +12,14 @@ The repository includes:
 
 Each installable module must live under `modules/<id>/`.
 
+Current modules:
+
+- `auth-token`
+- `metrics-prometheus`
+- `db-postgres`
+- `db-sqlite`
+- `db-mariadb`
+
 ## Manifest Schema (v1)
 
 ```json

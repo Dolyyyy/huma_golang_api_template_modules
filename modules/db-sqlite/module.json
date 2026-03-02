@@ -1,0 +1,22 @@
+{
+  "id": "db-sqlite",
+  "name": "SQLite connector",
+  "description": "Add SQLite connector and /db/sqlite/ping endpoint.",
+  "package": "internal/modules/db_sqlite",
+  "defaults": {
+    "SQLITE_PATH": "data/app.db",
+    "SQLITE_BUSY_TIMEOUT_MS": "5000",
+    "SQLITE_CONNECT_TIMEOUT_SEC": "5"
+  },
+  "cleanup_env_keys": [
+    "SQLITE_PATH",
+    "SQLITE_BUSY_TIMEOUT_MS",
+    "SQLITE_CONNECT_TIMEOUT_SEC"
+  ],
+  "files": [
+    {
+      "source": "files/module.go.tmpl",
+      "destination": "internal/modules/db_sqlite/module.go"
+    }
+  ]
+}
