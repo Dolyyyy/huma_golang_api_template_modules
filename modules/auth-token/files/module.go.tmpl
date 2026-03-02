@@ -1,0 +1,114 @@
+package auth_token
+
+import (
+	"crypto/subtle"
+	"encoding/json"
+	"fmt"
+	"net/http"
+	"os"
+	"strings"
+
+	"{{ .ProjectModulePath }}/internal/modulekit"
+)
+
+type unauthorizedBody struct {
+	Error  string `json:"error"`
+	Detail string `json:"detail"`
+}
+
+func init() {
+	modulekit.Register(modulekit.Definition{
+		ID:          "auth-token",
+		Name:        "API token auth",
+		Description: "Protect API routes using X-API-Token or Authorization: Bearer <token>.",
+		Validate:    validate,
+		Middleware:  middleware,
+	})
+}
+
+func validate() error {
+	if strings.TrimSpace(os.Getenv("AUTH_TOKEN")) == "" {
+		return fmt.Errorf("AUTH_TOKEN is required when auth-token module is installed")
+	}
+
+	return nil
+}
+
+func middleware(next http.Handler) http.Handler {
+	publicExact := []string{"/", "/docs"}
+	publicPrefixes := []string{"/docs", "/openapi", "/metrics"}
+
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if isPublicPath(r.URL.Path, publicExact, publicPrefixes) {
+			next.ServeHTTP(w, r)
+			return
+		}
+
+		expected := strings.TrimSpace(os.Getenv("AUTH_TOKEN"))
+		if expected == "" {
+			next.ServeHTTP(w, r)
+			return
+		}
+
+		provided := tokenFromRequest(r)
+		if !tokenMatches(expected, provided) {
+			respondUnauthorized(w)
+			return
+		}
+
+		next.ServeHTTP(w, r)
+	})
+}
+
+func isPublicPath(path string, exactPaths, prefixPaths []string) bool {
+	for _, item := range exactPaths {
+		if path == item {
+			return true
+		}
+	}
+
+	for _, item := range prefixPaths {
+		if strings.HasPrefix(path, item) {
+			return true
+		}
+	}
+
+	return false
+}
+
+func tokenFromRequest(r *http.Request) string {
+	xToken := strings.TrimSpace(r.Header.Get("X-API-Token"))
+	if xToken != "" {
+		return xToken
+	}
+
+	authorization := strings.TrimSpace(r.Header.Get("Authorization"))
+	parts := strings.SplitN(authorization, " ", 2)
+	if len(parts) != 2 {
+		return ""
+	}
+
+	if !strings.EqualFold(parts[0], "Bearer") {
+		return ""
+	}
+
+	return strings.TrimSpace(parts[1])
+}
+
+func tokenMatches(expected, actual string) bool {
+	if expected == "" || len(expected) != len(actual) {
+		return false
+	}
+
+	return subtle.ConstantTimeCompare([]byte(expected), []byte(actual)) == 1
+}
+
+func respondUnauthorized(w http.ResponseWriter) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusUnauthorized)
+
+	_ = json.NewEncoder(w).Encode(unauthorizedBody{
+		Error:  "unauthorized",
+		Detail: "A valid API token is required.",
+	})
+}

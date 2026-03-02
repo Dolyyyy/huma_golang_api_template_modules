@@ -1,0 +1,12 @@
+{
+  "id": "metrics-prometheus",
+  "name": "Prometheus metrics",
+  "description": "Expose /metrics for Prometheus scraping.",
+  "package": "internal/modules/metrics_prometheus",
+  "files": [
+    {
+      "source": "files/module.go.tmpl",
+      "destination": "internal/modules/metrics_prometheus/module.go"
+    }
+  ]
+}

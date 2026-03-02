@@ -1,0 +1,18 @@
+{
+  "id": "auth-token",
+  "name": "API token auth",
+  "description": "Protect API routes using X-API-Token or Authorization: Bearer <token>.",
+  "package": "internal/modules/auth_token",
+  "defaults": {
+    "AUTH_TOKEN": "change-me"
+  },
+  "cleanup_env_keys": [
+    "AUTH_TOKEN"
+  ],
+  "files": [
+    {
+      "source": "files/module.go.tmpl",
+      "destination": "internal/modules/auth_token/module.go"
+    }
+  ]
+}
