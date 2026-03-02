@@ -1,0 +1,14 @@
+[
+  {
+    "id": "auth-token",
+    "name": "API token auth",
+    "description": "Protect API routes using X-API-Token or Authorization: Bearer <token>.",
+    "package": "internal/modules/auth_token"
+  },
+  {
+    "id": "metrics-prometheus",
+    "name": "Prometheus metrics",
+    "description": "Expose /metrics for Prometheus scraping.",
+    "package": "internal/modules/metrics_prometheus"
+  }
+]

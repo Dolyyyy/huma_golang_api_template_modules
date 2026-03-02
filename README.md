@@ -4,10 +4,13 @@ This repository stores installable modules consumed by `templatectl`.
 
 ## Layout
 
-Each module must live under `modules/<id>/` and include:
+The repository includes:
 
-- `module.json`: module metadata used by `templatectl`
-- template files referenced by `module.json` (usually under `files/`)
+- `modules.json`: global index used by `templatectl list` (remote listing without clone)
+- `modules/<id>/module.json`: full module manifest used for installation
+- template files referenced by each module manifest (usually under `files/`)
+
+Each installable module must live under `modules/<id>/`.
 
 ## Manifest Schema (v1)
 
