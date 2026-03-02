@@ -1,0 +1,24 @@
+{
+  "id": "auth-jwt",
+  "name": "JWT auth middleware",
+  "description": "Protect API routes with JWT bearer tokens (HS256).",
+  "package": "internal/modules/auth_jwt",
+  "defaults": {
+    "JWT_SECRET": "change-me-super-secret",
+    "JWT_ISSUER": "huma-api",
+    "JWT_AUDIENCE": "huma-clients",
+    "JWT_CLOCK_SKEW_SEC": "30"
+  },
+  "cleanup_env_keys": [
+    "JWT_SECRET",
+    "JWT_ISSUER",
+    "JWT_AUDIENCE",
+    "JWT_CLOCK_SKEW_SEC"
+  ],
+  "files": [
+    {
+      "source": "files/module.go.tmpl",
+      "destination": "internal/modules/auth_jwt/module.go"
+    }
+  ]
+}

@@ -1,0 +1,28 @@
+{
+  "id": "mail-smtp",
+  "name": "SMTP connector",
+  "description": "Add SMTP connectivity check endpoint at /mail/smtp/ping.",
+  "package": "internal/modules/mail_smtp",
+  "defaults": {
+    "SMTP_HOST": "127.0.0.1",
+    "SMTP_PORT": "1025",
+    "SMTP_USERNAME": "",
+    "SMTP_PASSWORD": "",
+    "SMTP_STARTTLS": "false",
+    "SMTP_CONNECT_TIMEOUT_SEC": "5"
+  },
+  "cleanup_env_keys": [
+    "SMTP_HOST",
+    "SMTP_PORT",
+    "SMTP_USERNAME",
+    "SMTP_PASSWORD",
+    "SMTP_STARTTLS",
+    "SMTP_CONNECT_TIMEOUT_SEC"
+  ],
+  "files": [
+    {
+      "source": "files/module.go.tmpl",
+      "destination": "internal/modules/mail_smtp/module.go"
+    }
+  ]
+}

@@ -1,0 +1,20 @@
+{
+  "id": "rate-limit",
+  "name": "Rate limit middleware",
+  "description": "Add IP-based request rate limiting middleware.",
+  "package": "internal/modules/rate_limit",
+  "defaults": {
+    "RATE_LIMIT_REQUESTS_PER_MINUTE": "120",
+    "RATE_LIMIT_BURST": "30"
+  },
+  "cleanup_env_keys": [
+    "RATE_LIMIT_REQUESTS_PER_MINUTE",
+    "RATE_LIMIT_BURST"
+  ],
+  "files": [
+    {
+      "source": "files/module.go.tmpl",
+      "destination": "internal/modules/rate_limit/module.go"
+    }
+  ]
+}

@@ -1,0 +1,98 @@
+package secure_headers
+
+import (
+	"fmt"
+	"net/http"
+	"os"
+	"strconv"
+	"strings"
+
+	"{{ .ProjectModulePath }}/internal/modulekit"
+)
+
+func init() {
+	modulekit.Register(modulekit.Definition{
+		ID:          "secure-headers",
+		Name:        "Secure headers middleware",
+		Description: "Add common HTTP security headers to all responses.",
+		Middleware:  middleware,
+	})
+}
+
+func middleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		setHeaderIfMissing(w, "Content-Security-Policy", envOrDefault("SECURE_HEADERS_CSP", "default-src 'self'"))
+		setHeaderIfMissing(w, "Referrer-Policy", envOrDefault("SECURE_HEADERS_REFERRER_POLICY", "no-referrer"))
+		setHeaderIfMissing(w, "X-Frame-Options", envOrDefault("SECURE_HEADERS_FRAME_OPTIONS", "DENY"))
+		setHeaderIfMissing(w, "X-Content-Type-Options", envOrDefault("SECURE_HEADERS_CONTENT_TYPE_OPTIONS", "nosniff"))
+		setHeaderIfMissing(w, "X-XSS-Protection", envOrDefault("SECURE_HEADERS_XSS_PROTECTION", "0"))
+		setHeaderIfMissing(w, "Permissions-Policy", envOrDefault("SECURE_HEADERS_PERMISSIONS_POLICY", "geolocation=(), microphone=(), camera=()"))
+		setHeaderIfMissing(w, "Cross-Origin-Opener-Policy", envOrDefault("SECURE_HEADERS_CROSS_ORIGIN_OPENER_POLICY", "same-origin"))
+
+		if isSecureRequest(r) {
+			maxAge := parseInt("SECURE_HEADERS_HSTS_MAX_AGE", 63072000)
+			includeSubdomains := parseBool("SECURE_HEADERS_HSTS_INCLUDE_SUBDOMAINS", true)
+			preload := parseBool("SECURE_HEADERS_HSTS_PRELOAD", false)
+
+			value := fmt.Sprintf("max-age=%d", maxAge)
+			if includeSubdomains {
+				value += "; includeSubDomains"
+			}
+			if preload {
+				value += "; preload"
+			}
+
+			setHeaderIfMissing(w, "Strict-Transport-Security", value)
+		}
+
+		next.ServeHTTP(w, r)
+	})
+}
+
+func isSecureRequest(r *http.Request) bool {
+	if r.TLS != nil {
+		return true
+	}
+	return strings.EqualFold(strings.TrimSpace(r.Header.Get("X-Forwarded-Proto")), "https")
+}
+
+func setHeaderIfMissing(w http.ResponseWriter, key, value string) {
+	if strings.TrimSpace(value) == "" {
+		return
+	}
+	if w.Header().Get(key) == "" {
+		w.Header().Set(key, value)
+	}
+}
+
+func envOrDefault(key, fallback string) string {
+	value := strings.TrimSpace(os.Getenv(key))
+	if value == "" {
+		return fallback
+	}
+	return value
+}
+
+func parseInt(key string, fallback int) int {
+	value := strings.TrimSpace(os.Getenv(key))
+	if value == "" {
+		return fallback
+	}
+	parsed, err := strconv.Atoi(value)
+	if err != nil || parsed < 0 {
+		return fallback
+	}
+	return parsed
+}
+
+func parseBool(key string, fallback bool) bool {
+	value := strings.TrimSpace(os.Getenv(key))
+	if value == "" {
+		return fallback
+	}
+	parsed, err := strconv.ParseBool(value)
+	if err != nil {
+		return fallback
+	}
+	return parsed
+}

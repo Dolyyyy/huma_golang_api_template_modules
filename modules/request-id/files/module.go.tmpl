@@ -1,0 +1,65 @@
+package request_id
+
+import (
+	"context"
+	"crypto/rand"
+	"encoding/hex"
+	"net/http"
+	"os"
+	"strconv"
+	"strings"
+	"time"
+
+	"{{ .ProjectModulePath }}/internal/modulekit"
+)
+
+type requestIDContextKey struct{}
+
+func init() {
+	modulekit.Register(modulekit.Definition{
+		ID:          "request-id",
+		Name:        "Request ID middleware",
+		Description: "Inject and propagate request IDs on all HTTP requests.",
+		Middleware:  middleware,
+	})
+}
+
+func middleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		headerName := envOrDefault("REQUEST_ID_HEADER", "X-Request-ID")
+		requestID := strings.TrimSpace(r.Header.Get(headerName))
+		if requestID == "" {
+			requestID = generateRequestID()
+		}
+
+		w.Header().Set(headerName, requestID)
+		ctx := context.WithValue(r.Context(), requestIDContextKey{}, requestID)
+		next.ServeHTTP(w, r.WithContext(ctx))
+	})
+}
+
+func FromContext(ctx context.Context) (string, bool) {
+	value, ok := ctx.Value(requestIDContextKey{}).(string)
+	if !ok {
+		return "", false
+	}
+	return value, true
+}
+
+func generateRequestID() string {
+	buffer := make([]byte, 16)
+	if _, err := rand.Read(buffer); err == nil {
+		return hex.EncodeToString(buffer)
+	}
+
+	// Fallback keeps request flow resilient when crypto source fails.
+	return strconv.FormatInt(time.Now().UTC().UnixNano(), 36)
+}
+
+func envOrDefault(key, fallback string) string {
+	value := strings.TrimSpace(os.Getenv(key))
+	if value == "" {
+		return fallback
+	}
+	return value
+}

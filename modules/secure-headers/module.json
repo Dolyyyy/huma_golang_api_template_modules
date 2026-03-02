@@ -1,0 +1,36 @@
+{
+  "id": "secure-headers",
+  "name": "Secure headers middleware",
+  "description": "Add common HTTP security headers to all responses.",
+  "package": "internal/modules/secure_headers",
+  "defaults": {
+    "SECURE_HEADERS_CSP": "default-src 'self'",
+    "SECURE_HEADERS_REFERRER_POLICY": "no-referrer",
+    "SECURE_HEADERS_FRAME_OPTIONS": "DENY",
+    "SECURE_HEADERS_CONTENT_TYPE_OPTIONS": "nosniff",
+    "SECURE_HEADERS_XSS_PROTECTION": "0",
+    "SECURE_HEADERS_PERMISSIONS_POLICY": "geolocation=(), microphone=(), camera=()",
+    "SECURE_HEADERS_CROSS_ORIGIN_OPENER_POLICY": "same-origin",
+    "SECURE_HEADERS_HSTS_MAX_AGE": "63072000",
+    "SECURE_HEADERS_HSTS_INCLUDE_SUBDOMAINS": "true",
+    "SECURE_HEADERS_HSTS_PRELOAD": "false"
+  },
+  "cleanup_env_keys": [
+    "SECURE_HEADERS_CSP",
+    "SECURE_HEADERS_REFERRER_POLICY",
+    "SECURE_HEADERS_FRAME_OPTIONS",
+    "SECURE_HEADERS_CONTENT_TYPE_OPTIONS",
+    "SECURE_HEADERS_XSS_PROTECTION",
+    "SECURE_HEADERS_PERMISSIONS_POLICY",
+    "SECURE_HEADERS_CROSS_ORIGIN_OPENER_POLICY",
+    "SECURE_HEADERS_HSTS_MAX_AGE",
+    "SECURE_HEADERS_HSTS_INCLUDE_SUBDOMAINS",
+    "SECURE_HEADERS_HSTS_PRELOAD"
+  ],
+  "files": [
+    {
+      "source": "files/module.go.tmpl",
+      "destination": "internal/modules/secure_headers/module.go"
+    }
+  ]
+}

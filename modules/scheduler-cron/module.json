@@ -1,0 +1,26 @@
+{
+  "id": "scheduler-cron",
+  "name": "Cron scheduler",
+  "description": "Add cron-based background scheduler with /cron/health endpoint.",
+  "package": "internal/modules/scheduler_cron",
+  "defaults": {
+    "CRON_ENABLED": "true",
+    "CRON_SPEC": "*/5 * * * *",
+    "CRON_TIMEZONE": "UTC",
+    "CRON_LOG_MESSAGE": "scheduler-cron heartbeat",
+    "CRON_RUN_ON_STARTUP": "false"
+  },
+  "cleanup_env_keys": [
+    "CRON_ENABLED",
+    "CRON_SPEC",
+    "CRON_TIMEZONE",
+    "CRON_LOG_MESSAGE",
+    "CRON_RUN_ON_STARTUP"
+  ],
+  "files": [
+    {
+      "source": "files/module.go.tmpl",
+      "destination": "internal/modules/scheduler_cron/module.go"
+    }
+  ]
+}

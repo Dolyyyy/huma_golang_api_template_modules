@@ -1,0 +1,150 @@
+package cors
+
+import (
+	"net/http"
+	"os"
+	"strconv"
+	"strings"
+
+	"{{ .ProjectModulePath }}/internal/modulekit"
+)
+
+type corsConfig struct {
+	AllowAnyOrigin   bool
+	AllowedOrigins   map[string]struct{}
+	AllowedMethods   string
+	AllowedHeaders   string
+	ExposedHeaders   string
+	AllowCredentials bool
+	MaxAgeSeconds    int
+}
+
+func init() {
+	modulekit.Register(modulekit.Definition{
+		ID:          "cors",
+		Name:        "CORS middleware",
+		Description: "Add configurable CORS middleware for browser clients.",
+		Middleware:  middleware,
+	})
+}
+
+func middleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		origin := strings.TrimSpace(r.Header.Get("Origin"))
+		if origin == "" {
+			next.ServeHTTP(w, r)
+			return
+		}
+
+		cfg := loadConfig()
+		allowed := cfg.AllowAnyOrigin
+		if !allowed {
+			_, allowed = cfg.AllowedOrigins[origin]
+		}
+
+		if !allowed {
+			if isPreflight(r) {
+				http.Error(w, "CORS origin is not allowed", http.StatusForbidden)
+				return
+			}
+
+			next.ServeHTTP(w, r)
+			return
+		}
+
+		allowOrigin := origin
+		if cfg.AllowAnyOrigin && !cfg.AllowCredentials {
+			allowOrigin = "*"
+		}
+
+		w.Header().Set("Access-Control-Allow-Origin", allowOrigin)
+		w.Header().Add("Vary", "Origin")
+		w.Header().Add("Vary", "Access-Control-Request-Method")
+		w.Header().Add("Vary", "Access-Control-Request-Headers")
+
+		if cfg.AllowCredentials {
+			w.Header().Set("Access-Control-Allow-Credentials", "true")
+		}
+		if cfg.ExposedHeaders != "" {
+			w.Header().Set("Access-Control-Expose-Headers", cfg.ExposedHeaders)
+		}
+
+		if isPreflight(r) {
+			w.Header().Set("Access-Control-Allow-Methods", cfg.AllowedMethods)
+			w.Header().Set("Access-Control-Allow-Headers", cfg.AllowedHeaders)
+			if cfg.MaxAgeSeconds > 0 {
+				w.Header().Set("Access-Control-Max-Age", strconv.Itoa(cfg.MaxAgeSeconds))
+			}
+
+			w.WriteHeader(http.StatusNoContent)
+			return
+		}
+
+		next.ServeHTTP(w, r)
+	})
+}
+
+func loadConfig() corsConfig {
+	origins := parseCSV(envOrDefault("CORS_ALLOWED_ORIGINS", "*"))
+	allowAny := false
+	allowedOrigins := make(map[string]struct{}, len(origins))
+	for _, origin := range origins {
+		if origin == "*" {
+			allowAny = true
+			continue
+		}
+		allowedOrigins[origin] = struct{}{}
+	}
+
+	maxAge, err := strconv.Atoi(strings.TrimSpace(envOrDefault("CORS_MAX_AGE_SECONDS", "600")))
+	if err != nil || maxAge < 0 {
+		maxAge = 600
+	}
+
+	return corsConfig{
+		AllowAnyOrigin:   allowAny,
+		AllowedOrigins:   allowedOrigins,
+		AllowedMethods:   strings.Join(parseCSV(envOrDefault("CORS_ALLOWED_METHODS", "GET,POST,PUT,PATCH,DELETE,OPTIONS")), ", "),
+		AllowedHeaders:   strings.Join(parseCSV(envOrDefault("CORS_ALLOWED_HEADERS", "Authorization,Content-Type,X-Request-ID,X-API-Token")), ", "),
+		ExposedHeaders:   strings.Join(parseCSV(envOrDefault("CORS_EXPOSED_HEADERS", "X-Request-ID")), ", "),
+		AllowCredentials: parseBool("CORS_ALLOW_CREDENTIALS", false),
+		MaxAgeSeconds:    maxAge,
+	}
+}
+
+func isPreflight(r *http.Request) bool {
+	return r.Method == http.MethodOptions && strings.TrimSpace(r.Header.Get("Access-Control-Request-Method")) != ""
+}
+
+func parseCSV(raw string) []string {
+	parts := strings.Split(raw, ",")
+	out := make([]string, 0, len(parts))
+	for _, part := range parts {
+		item := strings.TrimSpace(part)
+		if item == "" {
+			continue
+		}
+		out = append(out, item)
+	}
+	return out
+}
+
+func envOrDefault(key, fallback string) string {
+	value := strings.TrimSpace(os.Getenv(key))
+	if value == "" {
+		return fallback
+	}
+	return value
+}
+
+func parseBool(key string, fallback bool) bool {
+	value := strings.TrimSpace(os.Getenv(key))
+	if value == "" {
+		return fallback
+	}
+	parsed, err := strconv.ParseBool(value)
+	if err != nil {
+		return fallback
+	}
+	return parsed
+}

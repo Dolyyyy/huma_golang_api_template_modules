@@ -1,0 +1,76 @@
+package http_timeout
+
+import (
+	"net/http"
+	"os"
+	"strconv"
+	"strings"
+	"time"
+
+	"{{ .ProjectModulePath }}/internal/modulekit"
+)
+
+func init() {
+	modulekit.Register(modulekit.Definition{
+		ID:          "http-timeout",
+		Name:        "HTTP timeout middleware",
+		Description: "Add global request timeout middleware.",
+		Middleware:  middleware,
+	})
+}
+
+func middleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if shouldSkip(r.URL.Path) {
+			next.ServeHTTP(w, r)
+			return
+		}
+
+		timeout := parseTimeout()
+		message := envOrDefault("HTTP_TIMEOUT_MESSAGE", "request timeout")
+		handler := http.TimeoutHandler(next, timeout, message)
+		handler.ServeHTTP(w, r)
+	})
+}
+
+func shouldSkip(path string) bool {
+	for _, prefix := range parseCSV(envOrDefault("HTTP_TIMEOUT_EXCLUDE_PATH_PREFIXES", "/docs,/openapi,/metrics")) {
+		if strings.HasPrefix(path, prefix) {
+			return true
+		}
+	}
+	return false
+}
+
+func parseTimeout() time.Duration {
+	raw := strings.TrimSpace(os.Getenv("HTTP_TIMEOUT_MS"))
+	if raw == "" {
+		return 10 * time.Second
+	}
+	milliseconds, err := strconv.Atoi(raw)
+	if err != nil || milliseconds <= 0 {
+		return 10 * time.Second
+	}
+	return time.Duration(milliseconds) * time.Millisecond
+}
+
+func parseCSV(raw string) []string {
+	parts := strings.Split(raw, ",")
+	out := make([]string, 0, len(parts))
+	for _, part := range parts {
+		item := strings.TrimSpace(part)
+		if item == "" {
+			continue
+		}
+		out = append(out, item)
+	}
+	return out
+}
+
+func envOrDefault(key, fallback string) string {
+	value := strings.TrimSpace(os.Getenv(key))
+	if value == "" {
+		return fallback
+	}
+	return value
+}

@@ -1,0 +1,22 @@
+{
+  "id": "http-timeout",
+  "name": "HTTP timeout middleware",
+  "description": "Add global request timeout middleware.",
+  "package": "internal/modules/http_timeout",
+  "defaults": {
+    "HTTP_TIMEOUT_MS": "10000",
+    "HTTP_TIMEOUT_MESSAGE": "request timeout",
+    "HTTP_TIMEOUT_EXCLUDE_PATH_PREFIXES": "/docs,/openapi,/metrics"
+  },
+  "cleanup_env_keys": [
+    "HTTP_TIMEOUT_MS",
+    "HTTP_TIMEOUT_MESSAGE",
+    "HTTP_TIMEOUT_EXCLUDE_PATH_PREFIXES"
+  ],
+  "files": [
+    {
+      "source": "files/module.go.tmpl",
+      "destination": "internal/modules/http_timeout/module.go"
+    }
+  ]
+}

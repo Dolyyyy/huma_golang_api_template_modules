@@ -19,8 +19,16 @@ Each installable module must live under `modules/<id>/`.
 
 Current modules:
 
+- `auth-jwt`
 - `auth-token`
+- `cors`
+- `http-timeout`
+- `mail-smtp`
 - `metrics-prometheus`
+- `rate-limit`
+- `request-id`
+- `scheduler-cron`
+- `secure-headers`
 - `db-postgres`
 - `db-sqlite`
 - `db-mariadb`

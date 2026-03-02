@@ -1,9 +1,21 @@
 [
   {
+    "id": "auth-jwt",
+    "name": "JWT auth middleware",
+    "description": "Protect API routes with JWT bearer tokens (HS256).",
+    "package": "internal/modules/auth_jwt"
+  },
+  {
     "id": "auth-token",
     "name": "API token auth",
     "description": "Protect API routes using X-API-Token or Authorization: Bearer <token>.",
     "package": "internal/modules/auth_token"
+  },
+  {
+    "id": "cors",
+    "name": "CORS middleware",
+    "description": "Add configurable CORS middleware for browser clients.",
+    "package": "internal/modules/cors"
   },
   {
     "id": "db-mariadb",
@@ -24,9 +36,45 @@
     "package": "internal/modules/db_sqlite"
   },
   {
+    "id": "http-timeout",
+    "name": "HTTP timeout middleware",
+    "description": "Add global request timeout middleware.",
+    "package": "internal/modules/http_timeout"
+  },
+  {
+    "id": "mail-smtp",
+    "name": "SMTP connector",
+    "description": "Add SMTP connectivity check endpoint at /mail/smtp/ping.",
+    "package": "internal/modules/mail_smtp"
+  },
+  {
     "id": "metrics-prometheus",
     "name": "Prometheus metrics",
     "description": "Expose /metrics for Prometheus scraping.",
     "package": "internal/modules/metrics_prometheus"
+  },
+  {
+    "id": "rate-limit",
+    "name": "Rate limit middleware",
+    "description": "Add IP-based request rate limiting middleware.",
+    "package": "internal/modules/rate_limit"
+  },
+  {
+    "id": "request-id",
+    "name": "Request ID middleware",
+    "description": "Inject and propagate request IDs on all HTTP requests.",
+    "package": "internal/modules/request_id"
+  },
+  {
+    "id": "scheduler-cron",
+    "name": "Cron scheduler",
+    "description": "Add cron-based background scheduler with /cron/health endpoint.",
+    "package": "internal/modules/scheduler_cron"
+  },
+  {
+    "id": "secure-headers",
+    "name": "Secure headers middleware",
+    "description": "Add common HTTP security headers to all responses.",
+    "package": "internal/modules/secure_headers"
   }
 ]

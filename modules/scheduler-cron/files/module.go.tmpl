@@ -1,0 +1,146 @@
+package scheduler_cron
+
+import (
+	"encoding/json"
+	"fmt"
+	"log"
+	"net/http"
+	"os"
+	"strconv"
+	"strings"
+	"sync"
+	"time"
+
+	"github.com/go-chi/chi/v5"
+	"github.com/robfig/cron/v3"
+
+	"{{ .ProjectModulePath }}/internal/modulekit"
+)
+
+type healthResponse struct {
+	Enabled   bool   `json:"enabled"`
+	Started   bool   `json:"started"`
+	Spec      string `json:"spec"`
+	Timezone  string `json:"timezone"`
+	LastRunAt string `json:"last_run_at,omitempty"`
+	NextRunAt string `json:"next_run_at,omitempty"`
+}
+
+var (
+	schedulerMu      sync.Mutex
+	schedulerStarted bool
+	scheduler        *cron.Cron
+	schedulerEntryID cron.EntryID
+
+	lastRunMu sync.RWMutex
+	lastRunAt time.Time
+)
+
+func init() {
+	modulekit.Register(modulekit.Definition{
+		ID:          "scheduler-cron",
+		Name:        "Cron scheduler",
+		Description: "Add cron-based background scheduler with /cron/health endpoint.",
+		Validate:    validateAndStart,
+		Routes:      registerRoutes,
+	})
+}
+
+func validateAndStart() error {
+	if !parseBool("CRON_ENABLED", true) {
+		return nil
+	}
+
+	spec := envOrDefault("CRON_SPEC", "*/5 * * * *")
+	timezone := envOrDefault("CRON_TIMEZONE", "UTC")
+	location, err := time.LoadLocation(timezone)
+	if err != nil {
+		return fmt.Errorf("invalid CRON_TIMEZONE %q: %w", timezone, err)
+	}
+
+	schedulerMu.Lock()
+	defer schedulerMu.Unlock()
+
+	if schedulerStarted {
+		return nil
+	}
+
+	scheduler = cron.New(cron.WithLocation(location))
+	entryID, err := scheduler.AddFunc(spec, runScheduledJob)
+	if err != nil {
+		return fmt.Errorf("invalid CRON_SPEC %q: %w", spec, err)
+	}
+
+	schedulerEntryID = entryID
+	scheduler.Start()
+	schedulerStarted = true
+
+	if parseBool("CRON_RUN_ON_STARTUP", false) {
+		go runScheduledJob()
+	}
+
+	return nil
+}
+
+func registerRoutes(router chi.Router) {
+	router.Get("/cron/health", healthHandler)
+}
+
+func healthHandler(w http.ResponseWriter, _ *http.Request) {
+	response := healthResponse{
+		Enabled:  parseBool("CRON_ENABLED", true),
+		Spec:     envOrDefault("CRON_SPEC", "*/5 * * * *"),
+		Timezone: envOrDefault("CRON_TIMEZONE", "UTC"),
+	}
+
+	schedulerMu.Lock()
+	response.Started = schedulerStarted
+	if schedulerStarted && scheduler != nil {
+		entry := scheduler.Entry(schedulerEntryID)
+		if !entry.Next.IsZero() {
+			response.NextRunAt = entry.Next.UTC().Format(time.RFC3339)
+		}
+	}
+	schedulerMu.Unlock()
+
+	lastRunMu.RLock()
+	if !lastRunAt.IsZero() {
+		response.LastRunAt = lastRunAt.UTC().Format(time.RFC3339)
+	}
+	lastRunMu.RUnlock()
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	_ = json.NewEncoder(w).Encode(response)
+}
+
+func runScheduledJob() {
+	now := time.Now().UTC()
+
+	lastRunMu.Lock()
+	lastRunAt = now
+	lastRunMu.Unlock()
+
+	message := envOrDefault("CRON_LOG_MESSAGE", "scheduler-cron heartbeat")
+	log.Printf("[scheduler-cron] %s at %s", message, now.Format(time.RFC3339))
+}
+
+func envOrDefault(key, fallback string) string {
+	value := strings.TrimSpace(os.Getenv(key))
+	if value == "" {
+		return fallback
+	}
+	return value
+}
+
+func parseBool(key string, fallback bool) bool {
+	value := strings.TrimSpace(os.Getenv(key))
+	if value == "" {
+		return fallback
+	}
+	parsed, err := strconv.ParseBool(value)
+	if err != nil {
+		return fallback
+	}
+	return parsed
+}

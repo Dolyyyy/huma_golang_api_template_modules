@@ -1,0 +1,158 @@
+package rate_limit
+
+import (
+	"encoding/json"
+	"net"
+	"net/http"
+	"os"
+	"strconv"
+	"strings"
+	"sync"
+	"time"
+
+	"{{ .ProjectModulePath }}/internal/modulekit"
+)
+
+type limitConfig struct {
+	RequestsPerMinute int
+	Burst             int
+}
+
+type visitor struct {
+	WindowStart time.Time
+	Count       int
+}
+
+type limiterState struct {
+	mu          sync.Mutex
+	visitors    map[string]*visitor
+	lastCleanup time.Time
+}
+
+type rateLimitResponse struct {
+	Error  string `json:"error"`
+	Detail string `json:"detail"`
+}
+
+var state = limiterState{
+	visitors: make(map[string]*visitor),
+}
+
+func init() {
+	modulekit.Register(modulekit.Definition{
+		ID:          "rate-limit",
+		Name:        "Rate limit middleware",
+		Description: "Add IP-based request rate limiting middleware.",
+		Middleware:  middleware,
+	})
+}
+
+func middleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		cfg := loadConfig()
+		key := clientIP(r)
+		if !allowRequest(key, cfg) {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusTooManyRequests)
+			_ = json.NewEncoder(w).Encode(rateLimitResponse{
+				Error:  "too_many_requests",
+				Detail: "Rate limit exceeded. Please retry later.",
+			})
+			return
+		}
+
+		next.ServeHTTP(w, r)
+	})
+}
+
+func loadConfig() limitConfig {
+	requestsPerMinute := parseInt("RATE_LIMIT_REQUESTS_PER_MINUTE", 120)
+	if requestsPerMinute <= 0 {
+		requestsPerMinute = 120
+	}
+
+	burst := parseInt("RATE_LIMIT_BURST", 30)
+	if burst < 0 {
+		burst = 0
+	}
+
+	return limitConfig{
+		RequestsPerMinute: requestsPerMinute,
+		Burst:             burst,
+	}
+}
+
+func allowRequest(key string, cfg limitConfig) bool {
+	limit := cfg.RequestsPerMinute + cfg.Burst
+	if limit <= 0 {
+		limit = 1
+	}
+
+	now := time.Now().UTC()
+	windowStart := now.Truncate(time.Minute)
+
+	state.mu.Lock()
+	defer state.mu.Unlock()
+
+	if state.lastCleanup.IsZero() || now.Sub(state.lastCleanup) >= 2*time.Minute {
+		for visitorKey, item := range state.visitors {
+			if windowStart.Sub(item.WindowStart) > time.Minute {
+				delete(state.visitors, visitorKey)
+			}
+		}
+		state.lastCleanup = now
+	}
+
+	item, ok := state.visitors[key]
+	if !ok || !item.WindowStart.Equal(windowStart) {
+		state.visitors[key] = &visitor{
+			WindowStart: windowStart,
+			Count:       1,
+		}
+		return true
+	}
+
+	if item.Count >= limit {
+		return false
+	}
+
+	item.Count++
+	return true
+}
+
+func clientIP(r *http.Request) string {
+	if forwarded := strings.TrimSpace(r.Header.Get("X-Forwarded-For")); forwarded != "" {
+		parts := strings.Split(forwarded, ",")
+		if len(parts) > 0 {
+			candidate := strings.TrimSpace(parts[0])
+			if candidate != "" {
+				return candidate
+			}
+		}
+	}
+
+	if realIP := strings.TrimSpace(r.Header.Get("X-Real-IP")); realIP != "" {
+		return realIP
+	}
+
+	host, _, err := net.SplitHostPort(strings.TrimSpace(r.RemoteAddr))
+	if err == nil && host != "" {
+		return host
+	}
+
+	return strings.TrimSpace(r.RemoteAddr)
+}
+
+func parseInt(key string, fallback int) int {
+	value := strings.TrimSpace(os.Getenv(key))
+	if value == "" {
+		return fallback
+	}
+
+	parsed, err := strconv.Atoi(value)
+	if err != nil {
+		return fallback
+	}
+
+	return parsed
+}

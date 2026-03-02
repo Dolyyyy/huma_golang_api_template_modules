@@ -1,0 +1,154 @@
+package mail_smtp
+
+import (
+	"crypto/tls"
+	"encoding/json"
+	"fmt"
+	"net"
+	"net/http"
+	"net/smtp"
+	"os"
+	"strconv"
+	"strings"
+	"time"
+
+	"github.com/go-chi/chi/v5"
+
+	"{{ .ProjectModulePath }}/internal/modulekit"
+)
+
+type pingResponse struct {
+	OK     bool   `json:"ok"`
+	Driver string `json:"driver"`
+	Detail string `json:"detail"`
+	Error  string `json:"error,omitempty"`
+}
+
+func init() {
+	modulekit.Register(modulekit.Definition{
+		ID:          "mail-smtp",
+		Name:        "SMTP connector",
+		Description: "Add SMTP connectivity check endpoint at /mail/smtp/ping.",
+		Routes:      registerRoutes,
+	})
+}
+
+func registerRoutes(router chi.Router) {
+	router.Get("/mail/smtp/ping", pingHandler)
+}
+
+func pingHandler(w http.ResponseWriter, r *http.Request) {
+	if err := pingSMTP(); err != nil {
+		respondJSON(w, http.StatusServiceUnavailable, pingResponse{
+			OK:     false,
+			Driver: "smtp",
+			Detail: "SMTP ping failed.",
+			Error:  err.Error(),
+		})
+		return
+	}
+
+	respondJSON(w, http.StatusOK, pingResponse{
+		OK:     true,
+		Driver: "smtp",
+		Detail: "SMTP ping successful.",
+	})
+}
+
+func pingSMTP() error {
+	host := envOrDefault("SMTP_HOST", "127.0.0.1")
+	port := envOrDefault("SMTP_PORT", "1025")
+	address := net.JoinHostPort(host, port)
+
+	conn, err := net.DialTimeout("tcp", address, connectTimeout())
+	if err != nil {
+		return fmt.Errorf("dial %s failed: %w", address, err)
+	}
+
+	client, err := smtp.NewClient(conn, host)
+	if err != nil {
+		_ = conn.Close()
+		return fmt.Errorf("smtp client failed: %w", err)
+	}
+	defer func() {
+		_ = client.Close()
+	}()
+
+	if parseBool("SMTP_STARTTLS", false) {
+		ok, _ := client.Extension("STARTTLS")
+		if !ok {
+			return fmt.Errorf("SMTP server does not support STARTTLS")
+		}
+
+		config := &tls.Config{
+			ServerName: host,
+			MinVersion: tls.VersionTLS12,
+		}
+
+		if err := client.StartTLS(config); err != nil {
+			return fmt.Errorf("STARTTLS failed: %w", err)
+		}
+	}
+
+	username := strings.TrimSpace(os.Getenv("SMTP_USERNAME"))
+	password := strings.TrimSpace(os.Getenv("SMTP_PASSWORD"))
+	if username != "" {
+		ok, _ := client.Extension("AUTH")
+		if !ok {
+			return fmt.Errorf("SMTP server does not advertise AUTH")
+		}
+
+		auth := smtp.PlainAuth("", username, password, host)
+		if err := client.Auth(auth); err != nil {
+			return fmt.Errorf("SMTP auth failed: %w", err)
+		}
+	}
+
+	if err := client.Noop(); err != nil {
+		return fmt.Errorf("SMTP NOOP failed: %w", err)
+	}
+
+	if err := client.Quit(); err != nil {
+		return fmt.Errorf("SMTP quit failed: %w", err)
+	}
+
+	return nil
+}
+
+func connectTimeout() time.Duration {
+	raw := strings.TrimSpace(os.Getenv("SMTP_CONNECT_TIMEOUT_SEC"))
+	if raw == "" {
+		return 5 * time.Second
+	}
+	seconds, err := strconv.Atoi(raw)
+	if err != nil || seconds <= 0 {
+		return 5 * time.Second
+	}
+	return time.Duration(seconds) * time.Second
+}
+
+func parseBool(key string, fallback bool) bool {
+	value := strings.TrimSpace(os.Getenv(key))
+	if value == "" {
+		return fallback
+	}
+	parsed, err := strconv.ParseBool(value)
+	if err != nil {
+		return fallback
+	}
+	return parsed
+}
+
+func envOrDefault(key, fallback string) string {
+	value := strings.TrimSpace(os.Getenv(key))
+	if value == "" {
+		return fallback
+	}
+	return value
+}
+
+func respondJSON(w http.ResponseWriter, statusCode int, payload pingResponse) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(statusCode)
+	_ = json.NewEncoder(w).Encode(payload)
+}

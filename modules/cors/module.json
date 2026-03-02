@@ -1,0 +1,28 @@
+{
+  "id": "cors",
+  "name": "CORS middleware",
+  "description": "Add configurable CORS middleware for browser clients.",
+  "package": "internal/modules/cors",
+  "defaults": {
+    "CORS_ALLOWED_ORIGINS": "*",
+    "CORS_ALLOWED_METHODS": "GET,POST,PUT,PATCH,DELETE,OPTIONS",
+    "CORS_ALLOWED_HEADERS": "Authorization,Content-Type,X-Request-ID,X-API-Token",
+    "CORS_EXPOSED_HEADERS": "X-Request-ID",
+    "CORS_ALLOW_CREDENTIALS": "false",
+    "CORS_MAX_AGE_SECONDS": "600"
+  },
+  "cleanup_env_keys": [
+    "CORS_ALLOWED_ORIGINS",
+    "CORS_ALLOWED_METHODS",
+    "CORS_ALLOWED_HEADERS",
+    "CORS_EXPOSED_HEADERS",
+    "CORS_ALLOW_CREDENTIALS",
+    "CORS_MAX_AGE_SECONDS"
+  ],
+  "files": [
+    {
+      "source": "files/module.go.tmpl",
+      "destination": "internal/modules/cors/module.go"
+    }
+  ]
+}

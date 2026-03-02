@@ -1,0 +1,147 @@
+package auth_jwt
+
+import (
+	"encoding/json"
+	"fmt"
+	"net/http"
+	"os"
+	"strconv"
+	"strings"
+	"time"
+
+	jwt "github.com/golang-jwt/jwt/v5"
+
+	"{{ .ProjectModulePath }}/internal/modulekit"
+)
+
+type unauthorizedBody struct {
+	Error  string `json:"error"`
+	Detail string `json:"detail"`
+}
+
+func init() {
+	modulekit.Register(modulekit.Definition{
+		ID:          "auth-jwt",
+		Name:        "JWT auth middleware",
+		Description: "Protect API routes with JWT bearer tokens (HS256).",
+		Validate:    validate,
+		Middleware:  middleware,
+	})
+}
+
+func validate() error {
+	if strings.TrimSpace(os.Getenv("JWT_SECRET")) == "" {
+		return fmt.Errorf("JWT_SECRET is required when auth-jwt module is installed")
+	}
+	return nil
+}
+
+func middleware(next http.Handler) http.Handler {
+	publicExact := []string{"/", "/docs"}
+	publicPrefixes := []string{"/docs", "/openapi", "/metrics"}
+
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if isPublicPath(r.URL.Path, publicExact, publicPrefixes) {
+			next.ServeHTTP(w, r)
+			return
+		}
+
+		secret := strings.TrimSpace(os.Getenv("JWT_SECRET"))
+		if secret == "" {
+			respondUnauthorized(w)
+			return
+		}
+
+		rawToken := tokenFromRequest(r)
+		if rawToken == "" {
+			respondUnauthorized(w)
+			return
+		}
+
+		if err := validateToken(rawToken, secret); err != nil {
+			respondUnauthorized(w)
+			return
+		}
+
+		next.ServeHTTP(w, r)
+	})
+}
+
+func validateToken(rawToken, secret string) error {
+	claims := jwt.MapClaims{}
+	options := []jwt.ParserOption{
+		jwt.WithValidMethods([]string{"HS256"}),
+		jwt.WithLeeway(clockSkew()),
+	}
+
+	if issuer := strings.TrimSpace(os.Getenv("JWT_ISSUER")); issuer != "" {
+		options = append(options, jwt.WithIssuer(issuer))
+	}
+	if audience := strings.TrimSpace(os.Getenv("JWT_AUDIENCE")); audience != "" {
+		options = append(options, jwt.WithAudience(audience))
+	}
+
+	token, err := jwt.ParseWithClaims(rawToken, claims, func(token *jwt.Token) (any, error) {
+		if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
+			return nil, fmt.Errorf("unexpected signing method")
+		}
+		return []byte(secret), nil
+	}, options...)
+	if err != nil {
+		return err
+	}
+	if !token.Valid {
+		return fmt.Errorf("invalid token")
+	}
+
+	return nil
+}
+
+func clockSkew() time.Duration {
+	value := strings.TrimSpace(os.Getenv("JWT_CLOCK_SKEW_SEC"))
+	if value == "" {
+		return 30 * time.Second
+	}
+	seconds, err := strconv.Atoi(value)
+	if err != nil || seconds < 0 {
+		return 30 * time.Second
+	}
+	return time.Duration(seconds) * time.Second
+}
+
+func isPublicPath(path string, exactPaths, prefixPaths []string) bool {
+	for _, item := range exactPaths {
+		if path == item {
+			return true
+		}
+	}
+	for _, item := range prefixPaths {
+		if strings.HasPrefix(path, item) {
+			return true
+		}
+	}
+	return false
+}
+
+func tokenFromRequest(r *http.Request) string {
+	authorization := strings.TrimSpace(r.Header.Get("Authorization"))
+	parts := strings.SplitN(authorization, " ", 2)
+	if len(parts) != 2 {
+		return ""
+	}
+
+	if !strings.EqualFold(parts[0], "Bearer") {
+		return ""
+	}
+
+	return strings.TrimSpace(parts[1])
+}
+
+func respondUnauthorized(w http.ResponseWriter) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusUnauthorized)
+	_ = json.NewEncoder(w).Encode(unauthorizedBody{
+		Error:  "unauthorized",
+		Detail: "A valid JWT bearer token is required.",
+	})
+}
