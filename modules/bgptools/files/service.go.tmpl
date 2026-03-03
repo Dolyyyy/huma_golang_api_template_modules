@@ -6,6 +6,8 @@ import (
 	"net/http"
 	"net/netip"
 	"path/filepath"
+	"sort"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -23,11 +25,11 @@ type service struct {
 	cfg    moduleConfig
 	client *http.Client
 
-	mu            sync.RWMutex
-	cond          *sync.Cond
-	loading       bool
-	snapshot      *dataset
-	lastError     string
+	mu             sync.RWMutex
+	cond           *sync.Cond
+	loading        bool
+	snapshot       *dataset
+	lastError      string
 	updaterStarted bool
 }
 
@@ -122,7 +124,7 @@ func (s *service) loadSnapshot(ctx context.Context, force bool) (*dataset, error
 		return nil, nil
 	}
 
-	ipv4Trie, ipv6Trie, prefixCount, err := parseTableFile(s.cfg.tablePath())
+	ipv4Trie, ipv6Trie, prefixCount, asnPrefixes, err := parseTableFile(s.cfg.tablePath())
 	if err != nil {
 		return nil, err
 	}
@@ -132,10 +134,14 @@ func (s *service) loadSnapshot(ctx context.Context, force bool) (*dataset, error
 		return nil, err
 	}
 
+	asnList := buildASNDirectory(asnMap)
+
 	return &dataset{
 		IPv4:        ipv4Trie,
 		IPv6:        ipv6Trie,
 		ASNs:        asnMap,
+		ASNList:     asnList,
+		ASNPrefixes: asnPrefixes,
 		PrefixCount: prefixCount,
 		LoadedAt:    time.Now().UTC(),
 	}, nil
@@ -181,6 +187,36 @@ func (s *service) LookupASNs(ctx context.Context, asns []int) ([]asnLookupResult
 	return results, nil
 }
 
+func (s *service) ListASNs(ctx context.Context, query, tag string, excludeUnknown bool, offset, limit int) (listASNsResponse, error) {
+	if err := s.ensureLoaded(ctx); err != nil {
+		return listASNsResponse{}, err
+	}
+
+	s.mu.RLock()
+	snapshot := s.snapshot
+	s.mu.RUnlock()
+	if snapshot == nil {
+		return listASNsResponse{}, fmt.Errorf("bgptools dataset is not available")
+	}
+
+	return snapshot.listASNs(query, tag, excludeUnknown, offset, limit), nil
+}
+
+func (s *service) ListASNPrefixes(ctx context.Context, asn, offset, limit int) (listASNPrefixesResponse, error) {
+	if err := s.ensureLoaded(ctx); err != nil {
+		return listASNPrefixesResponse{}, err
+	}
+
+	s.mu.RLock()
+	snapshot := s.snapshot
+	s.mu.RUnlock()
+	if snapshot == nil {
+		return listASNPrefixesResponse{}, fmt.Errorf("bgptools dataset is not available")
+	}
+
+	return snapshot.listASNPrefixes(asn, offset, limit), nil
+}
+
 func (s *service) Health() healthResponse {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
@@ -204,6 +240,137 @@ func (s *service) Health() healthResponse {
 
 func (s *service) maxBatch() int {
 	return s.cfg.MaxBatch
+}
+
+func buildASNDirectory(asnMap map[int]asnInfo) []asnDirectoryItem {
+	keys := make([]int, 0, len(asnMap))
+	for asn := range asnMap {
+		keys = append(keys, asn)
+	}
+	sort.Ints(keys)
+
+	out := make([]asnDirectoryItem, 0, len(keys))
+	for _, asn := range keys {
+		info := asnMap[asn]
+		asnText := strconv.Itoa(asn)
+		out = append(out, asnDirectoryItem{
+			ASN:     asn,
+			Name:    info.Name,
+			Tag:     info.Tag,
+			Country: info.Country,
+			searchKey: strings.ToLower(
+				asnText + " " +
+					"as" + asnText + " " +
+					info.Name + " " +
+					info.Tag + " " +
+					info.Country,
+			),
+		})
+	}
+
+	return out
+}
+
+func (d *dataset) listASNs(query, tag string, excludeUnknown bool, offset, limit int) listASNsResponse {
+	trimmedQuery := strings.TrimSpace(query)
+	normalizedTag := strings.ToLower(strings.TrimSpace(tag))
+	source := d.ASNList
+	if trimmedQuery != "" || normalizedTag != "" || excludeUnknown {
+		needle := strings.ToLower(trimmedQuery)
+		filtered := make([]asnDirectoryItem, 0, len(d.ASNList))
+		for _, item := range d.ASNList {
+			itemTag := strings.ToLower(strings.TrimSpace(item.Tag))
+			if excludeUnknown && itemTag == "unknown" {
+				continue
+			}
+			if normalizedTag != "" && itemTag != normalizedTag {
+				continue
+			}
+			if trimmedQuery != "" && !strings.Contains(item.searchKey, needle) {
+				continue
+			}
+
+			filtered = append(filtered, item)
+		}
+		source = filtered
+	}
+
+	total := len(source)
+
+	if offset < 0 {
+		offset = 0
+	}
+	if offset > total {
+		offset = total
+	}
+	if limit < 0 {
+		limit = 0
+	}
+
+	end := total
+	if limit > 0 {
+		end = offset + limit
+		if end > total {
+			end = total
+		}
+	}
+
+	results := make([]asnDirectoryItem, end-offset)
+	copy(results, source[offset:end])
+
+	return listASNsResponse{
+		Total:          total,
+		Count:          len(results),
+		Offset:         offset,
+		Limit:          limit,
+		HasMore:        end < total,
+		Query:          trimmedQuery,
+		Tag:            strings.TrimSpace(tag),
+		ExcludeUnknown: excludeUnknown,
+		Results:        results,
+	}
+}
+
+func (d *dataset) listASNPrefixes(asn, offset, limit int) listASNPrefixesResponse {
+	prefixes := d.ASNPrefixes[asn]
+	total := len(prefixes)
+
+	if offset < 0 {
+		offset = 0
+	}
+	if offset > total {
+		offset = total
+	}
+	if limit < 0 {
+		limit = 0
+	}
+
+	end := total
+	if limit > 0 {
+		end = offset + limit
+		if end > total {
+			end = total
+		}
+	}
+
+	results := make([]string, end-offset)
+	copy(results, prefixes[offset:end])
+
+	info, found := d.ASNs[asn]
+
+	return listASNPrefixesResponse{
+		ASN:     asn,
+		Found:   found || total > 0,
+		Name:    info.Name,
+		Tag:     info.Tag,
+		Country: info.Country,
+		Total:   total,
+		Count:   len(results),
+		Offset:  offset,
+		Limit:   limit,
+		HasMore: end < total,
+		Results: results,
+	}
 }
 
 func (d *dataset) lookupIP(input string) ipLookupResult {

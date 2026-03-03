@@ -61,6 +61,10 @@
       "destination": "internal/modules/bgptools/handlers.go"
     },
     {
+      "source": "files/huma_routes.go.tmpl",
+      "destination": "internal/modules/bgptools/huma_routes.go"
+    },
+    {
       "source": "files/cache.gitignore.tmpl",
       "destination": "cache/bgptools/.gitignore"
     }

@@ -17,6 +17,8 @@ type dataset struct {
 	IPv4        *trieNode
 	IPv6        *trieNode
 	ASNs        map[int]asnInfo
+	ASNList     []asnDirectoryItem
+	ASNPrefixes map[int][]string
 	PrefixCount int
 	LoadedAt    time.Time
 }
@@ -42,6 +44,14 @@ type asnLookupResult struct {
 	Country string `json:"country,omitempty"`
 }
 
+type asnDirectoryItem struct {
+	ASN       int    `json:"asn"`
+	Name      string `json:"name,omitempty"`
+	Tag       string `json:"tag,omitempty"`
+	Country   string `json:"country,omitempty"`
+	searchKey string
+}
+
 type batchIPResponse struct {
 	Count   int              `json:"count"`
 	Results []ipLookupResult `json:"results"`
@@ -50,6 +60,32 @@ type batchIPResponse struct {
 type batchASNResponse struct {
 	Count   int               `json:"count"`
 	Results []asnLookupResult `json:"results"`
+}
+
+type listASNsResponse struct {
+	Total          int                `json:"total"`
+	Count          int                `json:"count"`
+	Offset         int                `json:"offset"`
+	Limit          int                `json:"limit"`
+	HasMore        bool               `json:"has_more"`
+	Query          string             `json:"query,omitempty"`
+	Tag            string             `json:"tag,omitempty"`
+	ExcludeUnknown bool               `json:"exclude_unknown,omitempty"`
+	Results        []asnDirectoryItem `json:"results"`
+}
+
+type listASNPrefixesResponse struct {
+	ASN     int      `json:"asn"`
+	Found   bool     `json:"found"`
+	Name    string   `json:"name,omitempty"`
+	Tag     string   `json:"tag,omitempty"`
+	Country string   `json:"country,omitempty"`
+	Total   int      `json:"total"`
+	Count   int      `json:"count"`
+	Offset  int      `json:"offset"`
+	Limit   int      `json:"limit"`
+	HasMore bool     `json:"has_more"`
+	Results []string `json:"results"`
 }
 
 type ipBatchRequest struct {

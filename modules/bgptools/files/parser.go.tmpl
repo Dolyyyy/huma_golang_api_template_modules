@@ -9,6 +9,7 @@ import (
 	"io"
 	"net/netip"
 	"os"
+	"slices"
 	"strconv"
 	"strings"
 )
@@ -21,16 +22,17 @@ type tableLine struct {
 	AS       json.RawMessage `json:"AS"`
 }
 
-func parseTableFile(path string) (*trieNode, *trieNode, int, error) {
+func parseTableFile(path string) (*trieNode, *trieNode, int, map[int][]string, error) {
 	file, err := os.Open(path)
 	if err != nil {
-		return nil, nil, 0, fmt.Errorf("failed to open table dataset: %w", err)
+		return nil, nil, 0, nil, fmt.Errorf("failed to open table dataset: %w", err)
 	}
 	defer file.Close()
 
 	ipv4Trie := newTrie()
 	ipv6Trie := newTrie()
 	prefixCount := 0
+	asnPrefixes := make(map[int][]string)
 
 	scanner := bufio.NewScanner(file)
 	scanner.Buffer(make([]byte, 1024*1024), 8*1024*1024)
@@ -75,15 +77,37 @@ func parseTableFile(path string) (*trieNode, *trieNode, int, error) {
 		} else {
 			insertPrefix(ipv6Trie, prefix, record)
 		}
+		asnPrefixes[asn] = append(asnPrefixes[asn], record.CIDR)
 
 		prefixCount++
 	}
 
 	if err := scanner.Err(); err != nil {
-		return nil, nil, 0, fmt.Errorf("failed to read table dataset: %w", err)
+		return nil, nil, 0, nil, fmt.Errorf("failed to read table dataset: %w", err)
 	}
 
-	return ipv4Trie, ipv6Trie, prefixCount, nil
+	normalizePrefixLists(asnPrefixes)
+
+	return ipv4Trie, ipv6Trie, prefixCount, asnPrefixes, nil
+}
+
+func normalizePrefixLists(values map[int][]string) {
+	for asn, prefixes := range values {
+		if len(prefixes) <= 1 {
+			continue
+		}
+
+		slices.Sort(prefixes)
+		deduped := prefixes[:1]
+		for i := 1; i < len(prefixes); i++ {
+			if prefixes[i] == prefixes[i-1] {
+				continue
+			}
+			deduped = append(deduped, prefixes[i])
+		}
+
+		values[asn] = deduped
+	}
 }
 
 func parseASNsFile(path string) (map[int]asnInfo, error) {

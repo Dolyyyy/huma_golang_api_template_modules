@@ -159,7 +159,14 @@ func (h *handler) postReload(w http.ResponseWriter, r *http.Request) {
 }
 
 func parseIPInputs(r *http.Request) []string {
-	raw := r.URL.Query()["ip"]
+	return parseIPValues(r.URL.Query()["ip"])
+}
+
+func parseASNInputs(r *http.Request) ([]int, error) {
+	return parseASNValues(r.URL.Query()["asn"])
+}
+
+func parseIPValues(raw []string) []string {
 	out := make([]string, 0)
 	for _, item := range raw {
 		for _, token := range strings.Split(item, ",") {
@@ -173,8 +180,7 @@ func parseIPInputs(r *http.Request) []string {
 	return out
 }
 
-func parseASNInputs(r *http.Request) ([]int, error) {
-	raw := r.URL.Query()["asn"]
+func parseASNValues(raw []string) ([]int, error) {
 	out := make([]int, 0)
 
 	for _, item := range raw {

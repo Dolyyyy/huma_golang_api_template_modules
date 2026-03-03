@@ -4,8 +4,6 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/go-chi/chi/v5"
-
 	"{{ .ProjectModulePath }}/internal/modulekit"
 )
 
@@ -35,7 +33,7 @@ func init() {
 		Name:        "BGP.tools lookup",
 		Description: "Load BGP.tools prefix/ASN datasets and expose IP/ASN lookup endpoints with RAM+disk cache.",
 		Validate:    validate,
-		Routes:      registerRoutes,
+		HumaRoutes:  registerHumaRoutes,
 	})
 }
 
@@ -48,22 +46,4 @@ func validate() error {
 	}
 
 	return nil
-}
-
-func registerRoutes(router chi.Router) {
-	if globalSvc == nil {
-		return
-	}
-
-	handler := newHandler(globalSvc)
-
-	router.Route("/bgptools", func(r chi.Router) {
-		r.Get("/health", handler.getHealth)
-		r.Get("/ip", handler.getIPLookup)
-		r.Post("/ip", handler.postIPLookup)
-		r.Get("/asn", handler.getASNLookup)
-		r.Get("/asn/{asn}", handler.getASNByPath)
-		r.Post("/asn", handler.postASNLookup)
-		r.Post("/reload", handler.postReload)
-	})
 }

@@ -8,7 +8,9 @@ This module downloads BGP.tools datasets into disk cache and serves IP/ASN looku
 - `GET /bgptools/ip?ip=1.1.1.1,8.8.8.8`
 - `POST /bgptools/ip` with body `{"ips":["1.1.1.1","8.8.8.8"]}`
 - `GET /bgptools/asn?asn=13335,15169`
+- `GET /bgptools/asns` (optional `q`, `tag`, `exclude_unknown`, `offset`, `limit` query params)
 - `GET /bgptools/asn/{asn}`
+- `GET /bgptools/asn/{asn}/prefixes` (optional `offset`, `limit`)
 - `POST /bgptools/asn` with body `{"asns":[13335,15169]}`
 - `POST /bgptools/reload`
 
