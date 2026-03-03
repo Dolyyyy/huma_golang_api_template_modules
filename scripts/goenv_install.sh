@@ -39,6 +39,16 @@ as_root() {
   fi
 }
 
+try_as_root() {
+  if [ "$(id -u)" -eq 0 ]; then
+    "$@"
+  elif need_cmd sudo; then
+    sudo "$@"
+  else
+    return 1
+  fi
+}
+
 install_git() {
   if need_cmd git; then
     info "git already installed"
@@ -98,7 +108,36 @@ add_line 'export GOENV_ROOT="${GOENV_ROOT:-$HOME/.goenv}"'
 add_line 'export PATH="$GOENV_ROOT/bin:$PATH"'
 add_line 'eval "$(goenv init -)"'
 
-ok "goenv installed and configured"
+# Best effort: make goenv available immediately.
+export GOENV_ROOT
+export PATH="$GOENV_ROOT/bin:$PATH"
+if need_cmd goenv; then
+  eval "$(goenv init -)" >/dev/null 2>&1 || true
+fi
+
+# When installer is executed via "curl|bash", parent shell env cannot be changed.
+# Create a launcher in /usr/local/bin so "goenv" is usually available right away.
+if ! need_cmd goenv && [ -x "$GOENV_ROOT/bin/goenv" ]; then
+  if try_as_root mkdir -p /usr/local/bin && try_as_root ln -sf "$GOENV_ROOT/bin/goenv" /usr/local/bin/goenv; then
+    info "created launcher: /usr/local/bin/goenv"
+  else
+    warn "could not create /usr/local/bin/goenv launcher (no root/sudo)"
+  fi
+fi
+
+if need_cmd goenv; then
+  version="$(goenv --version 2>/dev/null || true)"
+  if [ -n "$version" ]; then
+    ok "goenv installed and available now (${version})"
+  else
+    ok "goenv installed and available now"
+  fi
+else
+  ok "goenv installed and configured"
+  warn "goenv command is not available in current shell yet"
+fi
+
 printf "%b\n" "${C_BOLD}Next steps${C_RESET}"
-info "Restart your shell: exec \$SHELL"
-info "Verify: goenv --version"
+info "Verify now: goenv --version"
+info "If command is not found yet: source $RC"
+info "Fallback: exec \$SHELL"
