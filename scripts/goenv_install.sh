@@ -141,3 +141,18 @@ printf "%b\n" "${C_BOLD}Next steps${C_RESET}"
 info "Verify now: goenv --version"
 info "If command is not found yet: source $RC"
 info "Fallback: exec \$SHELL"
+
+# Default behavior: open a fresh interactive login shell at the end.
+# This is especially useful for "curl|bash" or "wget|bash" invocations.
+AUTO_SHELL="${GOENV_INSTALL_AUTO_SHELL:-1}"
+if [ "$AUTO_SHELL" = "1" ]; then
+  if [ -e /dev/tty ] && [ -r /dev/tty ] && [ -w /dev/tty ]; then
+    NEW_SHELL="${SHELL:-/bin/bash}"
+    info "opening a new login shell now (${NEW_SHELL} -il)"
+    exec "$NEW_SHELL" -il < /dev/tty > /dev/tty 2>&1
+  else
+    warn "cannot open an interactive shell automatically (no /dev/tty)"
+  fi
+else
+  info "auto shell restart disabled (GOENV_INSTALL_AUTO_SHELL=0)"
+fi
