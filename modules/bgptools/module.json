@@ -1,0 +1,68 @@
+{
+  "id": "bgptools",
+  "name": "BGP.tools lookup",
+  "description": "Load BGP.tools prefix/ASN datasets and expose IP/ASN lookup endpoints with RAM+disk cache.",
+  "package": "internal/modules/bgptools",
+  "defaults": {
+    "BGPTOOLS_TABLE_URL": "https://bgp.tools/table.jsonl",
+    "BGPTOOLS_ASNS_URL": "https://bgp.tools/asns.csv",
+    "BGPTOOLS_CACHE_DIR": "cache/bgptools",
+    "BGPTOOLS_TABLE_MAX_AGE": "30m",
+    "BGPTOOLS_ASNS_MAX_AGE": "24h",
+    "BGPTOOLS_UPDATE_INTERVAL": "1h",
+    "BGPTOOLS_HTTP_TIMEOUT": "5m",
+    "BGPTOOLS_USER_AGENT": "huma-golang-api-template/bgptools",
+    "BGPTOOLS_PRELOAD": "false",
+    "BGPTOOLS_MAX_BATCH": "256"
+  },
+  "cleanup_env_keys": [
+    "BGPTOOLS_TABLE_URL",
+    "BGPTOOLS_ASNS_URL",
+    "BGPTOOLS_CACHE_DIR",
+    "BGPTOOLS_TABLE_MAX_AGE",
+    "BGPTOOLS_ASNS_MAX_AGE",
+    "BGPTOOLS_UPDATE_INTERVAL",
+    "BGPTOOLS_HTTP_TIMEOUT",
+    "BGPTOOLS_USER_AGENT",
+    "BGPTOOLS_PRELOAD",
+    "BGPTOOLS_MAX_BATCH"
+  ],
+  "files": [
+    {
+      "source": "files/module.go.tmpl",
+      "destination": "internal/modules/bgptools/module.go"
+    },
+    {
+      "source": "files/config.go.tmpl",
+      "destination": "internal/modules/bgptools/config.go"
+    },
+    {
+      "source": "files/types.go.tmpl",
+      "destination": "internal/modules/bgptools/types.go"
+    },
+    {
+      "source": "files/trie.go.tmpl",
+      "destination": "internal/modules/bgptools/trie.go"
+    },
+    {
+      "source": "files/parser.go.tmpl",
+      "destination": "internal/modules/bgptools/parser.go"
+    },
+    {
+      "source": "files/client.go.tmpl",
+      "destination": "internal/modules/bgptools/client.go"
+    },
+    {
+      "source": "files/service.go.tmpl",
+      "destination": "internal/modules/bgptools/service.go"
+    },
+    {
+      "source": "files/handlers.go.tmpl",
+      "destination": "internal/modules/bgptools/handlers.go"
+    },
+    {
+      "source": "files/cache.gitignore.tmpl",
+      "destination": "cache/bgptools/.gitignore"
+    }
+  ]
+}

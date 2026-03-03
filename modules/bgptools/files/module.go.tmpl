@@ -1,0 +1,69 @@
+package bgptools
+
+import (
+	"context"
+	"fmt"
+
+	"github.com/go-chi/chi/v5"
+
+	"{{ .ProjectModulePath }}/internal/modulekit"
+)
+
+var (
+	globalConfig moduleConfig
+	globalErr    error
+	globalSvc    *service
+)
+
+func init() {
+	globalConfig, globalErr = loadConfig()
+	if globalErr == nil {
+		globalSvc = newService(globalConfig)
+		globalSvc.startUpdater()
+
+		if globalConfig.Preload {
+			go func() {
+				ctx, cancel := context.WithTimeout(context.Background(), globalConfig.HTTPTimeout)
+				defer cancel()
+				_ = globalSvc.reload(ctx, true)
+			}()
+		}
+	}
+
+	modulekit.Register(modulekit.Definition{
+		ID:          "bgptools",
+		Name:        "BGP.tools lookup",
+		Description: "Load BGP.tools prefix/ASN datasets and expose IP/ASN lookup endpoints with RAM+disk cache.",
+		Validate:    validate,
+		Routes:      registerRoutes,
+	})
+}
+
+func validate() error {
+	if globalErr != nil {
+		return globalErr
+	}
+	if globalSvc == nil {
+		return fmt.Errorf("bgptools service is not initialized")
+	}
+
+	return nil
+}
+
+func registerRoutes(router chi.Router) {
+	if globalSvc == nil {
+		return
+	}
+
+	handler := newHandler(globalSvc)
+
+	router.Route("/bgptools", func(r chi.Router) {
+		r.Get("/health", handler.getHealth)
+		r.Get("/ip", handler.getIPLookup)
+		r.Post("/ip", handler.postIPLookup)
+		r.Get("/asn", handler.getASNLookup)
+		r.Get("/asn/{asn}", handler.getASNByPath)
+		r.Post("/asn", handler.postASNLookup)
+		r.Post("/reload", handler.postReload)
+	})
+}

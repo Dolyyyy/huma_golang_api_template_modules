@@ -12,6 +12,12 @@
     "package": "internal/modules/auth_token"
   },
   {
+    "id": "bgptools",
+    "name": "BGP.tools lookup",
+    "description": "Load BGP.tools prefix/ASN datasets and expose IP/ASN lookup endpoints with RAM+disk cache.",
+    "package": "internal/modules/bgptools"
+  },
+  {
     "id": "cors",
     "name": "CORS middleware",
     "description": "Add configurable CORS middleware for browser clients.",

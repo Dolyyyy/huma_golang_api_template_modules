@@ -79,6 +79,7 @@ Current modules:
 
 - `auth-jwt`
 - `auth-token`
+- `bgptools`
 - `cors`
 - `http-timeout`
 - `mail-smtp`
