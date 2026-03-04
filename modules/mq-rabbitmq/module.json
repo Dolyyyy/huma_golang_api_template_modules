@@ -1,0 +1,44 @@
+{
+  "id": "mq-rabbitmq",
+  "name": "RabbitMQ connector",
+  "description": "Add RabbitMQ ping and publish test endpoints.",
+  "package": "internal/modules/mq_rabbitmq",
+  "defaults": {
+    "RABBITMQ_URL": "amqp://guest:guest@127.0.0.1:5672/",
+    "RABBITMQ_EXCHANGE": "",
+    "RABBITMQ_ROUTING_KEY": "test.queue",
+    "RABBITMQ_TIMEOUT_SEC": "5",
+    "RABBITMQ_CONTENT_TYPE": "application/json",
+    "RABBITMQ_PERSISTENT": "true",
+    "RABBITMQ_AUTO_DECLARE_QUEUE": "true",
+    "RABBITMQ_QUEUE": "test.queue"
+  },
+  "cleanup_env_keys": [
+    "RABBITMQ_URL",
+    "RABBITMQ_EXCHANGE",
+    "RABBITMQ_ROUTING_KEY",
+    "RABBITMQ_TIMEOUT_SEC",
+    "RABBITMQ_CONTENT_TYPE",
+    "RABBITMQ_PERSISTENT",
+    "RABBITMQ_AUTO_DECLARE_QUEUE",
+    "RABBITMQ_QUEUE"
+  ],
+  "files": [
+    {
+      "source": "files/module.go.tmpl",
+      "destination": "internal/modules/mq_rabbitmq/module.go"
+    },
+    {
+      "source": "files/config.go.tmpl",
+      "destination": "internal/modules/mq_rabbitmq/config.go"
+    },
+    {
+      "source": "files/service.go.tmpl",
+      "destination": "internal/modules/mq_rabbitmq/service.go"
+    },
+    {
+      "source": "files/handlers.go.tmpl",
+      "destination": "internal/modules/mq_rabbitmq/handlers.go"
+    }
+  ]
+}

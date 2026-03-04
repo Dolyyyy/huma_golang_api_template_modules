@@ -1,0 +1,100 @@
+package mq_rabbitmq
+
+import (
+	"context"
+	"strings"
+	"time"
+
+	amqp "github.com/rabbitmq/amqp091-go"
+)
+
+type rabbitMQService struct {
+	cfg rabbitMQConfig
+}
+
+type publishInput struct {
+	Exchange    string
+	RoutingKey  string
+	Message     string
+	ContentType string
+	Persistent  bool
+}
+
+func newRabbitMQService() (*rabbitMQService, error) {
+	cfg, err := loadRabbitMQConfig()
+	if err != nil {
+		return nil, err
+	}
+
+	return &rabbitMQService{cfg: cfg}, nil
+}
+
+func (s *rabbitMQService) Ping() error {
+	conn, err := amqp.DialConfig(s.cfg.URL, amqp.Config{
+		Dial: amqp.DefaultDial(s.cfg.Timeout),
+	})
+	if err != nil {
+		return err
+	}
+	defer conn.Close()
+
+	channel, err := conn.Channel()
+	if err != nil {
+		return err
+	}
+	return channel.Close()
+}
+
+func (s *rabbitMQService) Publish(ctx context.Context, input publishInput) error {
+	conn, err := amqp.DialConfig(s.cfg.URL, amqp.Config{
+		Dial: amqp.DefaultDial(s.cfg.Timeout),
+	})
+	if err != nil {
+		return err
+	}
+	defer conn.Close()
+
+	channel, err := conn.Channel()
+	if err != nil {
+		return err
+	}
+	defer channel.Close()
+
+	if s.cfg.AutoDeclareQueue {
+		queueName := strings.TrimSpace(s.cfg.Queue)
+		if queueName == "" {
+			queueName = strings.TrimSpace(input.RoutingKey)
+		}
+
+		_, err = channel.QueueDeclare(
+			queueName,
+			true,
+			false,
+			false,
+			false,
+			nil,
+		)
+		if err != nil {
+			return err
+		}
+	}
+
+	deliveryMode := uint8(1)
+	if input.Persistent {
+		deliveryMode = uint8(2)
+	}
+
+	return channel.PublishWithContext(
+		ctx,
+		input.Exchange,
+		input.RoutingKey,
+		false,
+		false,
+		amqp.Publishing{
+			ContentType:  input.ContentType,
+			Body:         []byte(input.Message),
+			DeliveryMode: deliveryMode,
+			Timestamp:    time.Now().UTC(),
+		},
+	)
+}

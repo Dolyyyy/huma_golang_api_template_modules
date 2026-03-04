@@ -1,0 +1,223 @@
+package cache_redis
+
+import (
+	"context"
+	"encoding/json"
+	"net/http"
+	"strings"
+	"time"
+)
+
+type pingResponse struct {
+	OK     bool   `json:"ok"`
+	Driver string `json:"driver"`
+	Detail string `json:"detail"`
+	Error  string `json:"error,omitempty"`
+}
+
+type getResponse struct {
+	OK     bool   `json:"ok"`
+	Key    string `json:"key"`
+	Value  string `json:"value,omitempty"`
+	Source string `json:"source,omitempty"`
+	Error  string `json:"error,omitempty"`
+}
+
+type setRequest struct {
+	Key        string `json:"key"`
+	Value      string `json:"value"`
+	TTLSeconds int    `json:"ttl_seconds,omitempty"`
+}
+
+type setResponse struct {
+	OK         bool   `json:"ok"`
+	Key        string `json:"key"`
+	TTLSeconds int    `json:"ttl_seconds"`
+	Error      string `json:"error,omitempty"`
+}
+
+type delResponse struct {
+	OK    bool   `json:"ok"`
+	Key   string `json:"key"`
+	Error string `json:"error,omitempty"`
+}
+
+func pingHandler(w http.ResponseWriter, r *http.Request) {
+	svc, ok := mustService(w)
+	if !ok {
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(r.Context(), requestTimeout())
+	defer cancel()
+
+	if err := svc.Ping(ctx); err != nil {
+		respondJSON(w, http.StatusServiceUnavailable, pingResponse{
+			OK:     false,
+			Driver: "redis",
+			Detail: "Redis ping failed.",
+			Error:  err.Error(),
+		})
+		return
+	}
+
+	respondJSON(w, http.StatusOK, pingResponse{
+		OK:     true,
+		Driver: "redis",
+		Detail: "Redis ping successful.",
+	})
+}
+
+func getHandler(w http.ResponseWriter, r *http.Request) {
+	svc, ok := mustService(w)
+	if !ok {
+		return
+	}
+
+	key := strings.TrimSpace(r.URL.Query().Get("key"))
+	if key == "" {
+		respondJSON(w, http.StatusBadRequest, getResponse{
+			OK:    false,
+			Error: "query parameter 'key' is required",
+		})
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(r.Context(), requestTimeout())
+	defer cancel()
+
+	value, found, source, err := svc.Get(ctx, key)
+	if err != nil {
+		respondJSON(w, http.StatusServiceUnavailable, getResponse{
+			OK:    false,
+			Key:   key,
+			Error: err.Error(),
+		})
+		return
+	}
+	if !found {
+		respondJSON(w, http.StatusNotFound, getResponse{
+			OK:    false,
+			Key:   key,
+			Error: "key not found",
+		})
+		return
+	}
+
+	respondJSON(w, http.StatusOK, getResponse{
+		OK:     true,
+		Key:    key,
+		Value:  value,
+		Source: source,
+	})
+}
+
+func setHandler(w http.ResponseWriter, r *http.Request) {
+	svc, ok := mustService(w)
+	if !ok {
+		return
+	}
+
+	var body setRequest
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		respondJSON(w, http.StatusBadRequest, setResponse{
+			OK:    false,
+			Error: "invalid JSON body",
+		})
+		return
+	}
+
+	body.Key = strings.TrimSpace(body.Key)
+	if body.Key == "" {
+		respondJSON(w, http.StatusBadRequest, setResponse{
+			OK:    false,
+			Error: "field 'key' is required",
+		})
+		return
+	}
+
+	ttlSeconds := body.TTLSeconds
+	if ttlSeconds < 0 {
+		respondJSON(w, http.StatusBadRequest, setResponse{
+			OK:    false,
+			Key:   body.Key,
+			Error: "ttl_seconds must be >= 0",
+		})
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(r.Context(), requestTimeout())
+	defer cancel()
+
+	if err := svc.Set(ctx, body.Key, body.Value, time.Duration(ttlSeconds)*time.Second); err != nil {
+		respondJSON(w, http.StatusServiceUnavailable, setResponse{
+			OK:    false,
+			Key:   body.Key,
+			Error: err.Error(),
+		})
+		return
+	}
+
+	respondJSON(w, http.StatusOK, setResponse{
+		OK:         true,
+		Key:        body.Key,
+		TTLSeconds: ttlSeconds,
+	})
+}
+
+func delHandler(w http.ResponseWriter, r *http.Request) {
+	svc, ok := mustService(w)
+	if !ok {
+		return
+	}
+
+	key := strings.TrimSpace(r.URL.Query().Get("key"))
+	if key == "" {
+		respondJSON(w, http.StatusBadRequest, delResponse{
+			OK:    false,
+			Error: "query parameter 'key' is required",
+		})
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(r.Context(), requestTimeout())
+	defer cancel()
+
+	if err := svc.Del(ctx, key); err != nil {
+		respondJSON(w, http.StatusServiceUnavailable, delResponse{
+			OK:    false,
+			Key:   key,
+			Error: err.Error(),
+		})
+		return
+	}
+
+	respondJSON(w, http.StatusOK, delResponse{
+		OK:  true,
+		Key: key,
+	})
+}
+
+func requestTimeout() time.Duration {
+	return envDurationSeconds("REDIS_RW_TIMEOUT_SEC", 3)
+}
+
+func mustService(w http.ResponseWriter) (*cacheService, bool) {
+	svc, err := sharedService()
+	if err != nil {
+		respondJSON(w, http.StatusServiceUnavailable, pingResponse{
+			OK:     false,
+			Driver: "redis",
+			Detail: "Redis service initialization failed.",
+			Error:  err.Error(),
+		})
+		return nil, false
+	}
+	return svc, true
+}
+
+func respondJSON(w http.ResponseWriter, statusCode int, payload any) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(statusCode)
+	_ = json.NewEncoder(w).Encode(payload)
+}

@@ -1,0 +1,22 @@
+package mq_rabbitmq
+
+import (
+	"github.com/go-chi/chi/v5"
+
+	"{{ .ProjectModulePath }}/internal/modulekit"
+)
+
+func init() {
+	modulekit.Register(modulekit.Definition{
+		ID:          "mq-rabbitmq",
+		Name:        "RabbitMQ connector",
+		Description: "Add RabbitMQ ping and publish test endpoints.",
+		Validate:    validateRabbitMQConfig,
+		Routes:      registerRoutes,
+	})
+}
+
+func registerRoutes(router chi.Router) {
+	router.Get("/mq/rabbitmq/ping", pingHandler)
+	router.Post("/mq/rabbitmq/publish", publishHandler)
+}

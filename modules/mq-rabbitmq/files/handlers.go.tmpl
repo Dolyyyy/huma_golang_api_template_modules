@@ -1,0 +1,150 @@
+package mq_rabbitmq
+
+import (
+	"context"
+	"encoding/json"
+	"net/http"
+	"strings"
+)
+
+type pingResponse struct {
+	OK     bool   `json:"ok"`
+	Driver string `json:"driver"`
+	Detail string `json:"detail"`
+	Error  string `json:"error,omitempty"`
+}
+
+type publishRequest struct {
+	Exchange    string `json:"exchange,omitempty"`
+	RoutingKey  string `json:"routing_key,omitempty"`
+	Message     string `json:"message"`
+	ContentType string `json:"content_type,omitempty"`
+	Persistent  *bool  `json:"persistent,omitempty"`
+}
+
+type publishResponse struct {
+	OK          bool   `json:"ok"`
+	Driver      string `json:"driver"`
+	Exchange    string `json:"exchange"`
+	RoutingKey  string `json:"routing_key"`
+	ContentType string `json:"content_type"`
+	Persistent  bool   `json:"persistent"`
+	Error       string `json:"error,omitempty"`
+}
+
+func pingHandler(w http.ResponseWriter, r *http.Request) {
+	service, err := newRabbitMQService()
+	if err != nil {
+		respondJSON(w, http.StatusServiceUnavailable, pingResponse{
+			OK:     false,
+			Driver: "rabbitmq",
+			Detail: "RabbitMQ config is invalid.",
+			Error:  err.Error(),
+		})
+		return
+	}
+
+	if err := service.Ping(); err != nil {
+		respondJSON(w, http.StatusServiceUnavailable, pingResponse{
+			OK:     false,
+			Driver: "rabbitmq",
+			Detail: "RabbitMQ ping failed.",
+			Error:  err.Error(),
+		})
+		return
+	}
+
+	respondJSON(w, http.StatusOK, pingResponse{
+		OK:     true,
+		Driver: "rabbitmq",
+		Detail: "RabbitMQ ping successful.",
+	})
+}
+
+func publishHandler(w http.ResponseWriter, r *http.Request) {
+	service, err := newRabbitMQService()
+	if err != nil {
+		respondJSON(w, http.StatusServiceUnavailable, publishResponse{
+			OK:     false,
+			Driver: "rabbitmq",
+			Error:  err.Error(),
+		})
+		return
+	}
+
+	var body publishRequest
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		respondJSON(w, http.StatusBadRequest, publishResponse{
+			OK:     false,
+			Driver: "rabbitmq",
+			Error:  "invalid JSON body",
+		})
+		return
+	}
+
+	body.Message = strings.TrimSpace(body.Message)
+	if body.Message == "" {
+		respondJSON(w, http.StatusBadRequest, publishResponse{
+			OK:     false,
+			Driver: "rabbitmq",
+			Error:  "field 'message' is required",
+		})
+		return
+	}
+
+	exchange := strings.TrimSpace(body.Exchange)
+	if exchange == "" {
+		exchange = service.cfg.Exchange
+	}
+
+	routingKey := strings.TrimSpace(body.RoutingKey)
+	if routingKey == "" {
+		routingKey = service.cfg.RoutingKey
+	}
+
+	contentType := strings.TrimSpace(body.ContentType)
+	if contentType == "" {
+		contentType = service.cfg.ContentType
+	}
+
+	persistent := service.cfg.Persistent
+	if body.Persistent != nil {
+		persistent = *body.Persistent
+	}
+
+	ctx, cancel := context.WithTimeout(r.Context(), service.cfg.Timeout)
+	defer cancel()
+
+	err = service.Publish(ctx, publishInput{
+		Exchange:    exchange,
+		RoutingKey:  routingKey,
+		Message:     body.Message,
+		ContentType: contentType,
+		Persistent:  persistent,
+	})
+	if err != nil {
+		respondJSON(w, http.StatusServiceUnavailable, publishResponse{
+			OK:         false,
+			Driver:     "rabbitmq",
+			Exchange:   exchange,
+			RoutingKey: routingKey,
+			Error:      err.Error(),
+		})
+		return
+	}
+
+	respondJSON(w, http.StatusOK, publishResponse{
+		OK:          true,
+		Driver:      "rabbitmq",
+		Exchange:    exchange,
+		RoutingKey:  routingKey,
+		ContentType: contentType,
+		Persistent:  persistent,
+	})
+}
+
+func respondJSON(w http.ResponseWriter, statusCode int, payload any) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(statusCode)
+	_ = json.NewEncoder(w).Encode(payload)
+}

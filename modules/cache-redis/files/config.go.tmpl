@@ -1,0 +1,104 @@
+package cache_redis
+
+import (
+	"fmt"
+	"os"
+	"strconv"
+	"strings"
+	"time"
+)
+
+type redisConfig struct {
+	Address           string
+	Password          string
+	DB                int
+	UseTLS            bool
+	ConnectTimeout    time.Duration
+	ReadTimeout       time.Duration
+	WriteTimeout      time.Duration
+	DefaultTTL        time.Duration
+	LocalCacheEnabled bool
+	LocalCacheTTL     time.Duration
+}
+
+func loadRedisConfig() (redisConfig, error) {
+	cfg := redisConfig{
+		Address:           envOrDefault("REDIS_ADDR", "127.0.0.1:6379"),
+		Password:          strings.TrimSpace(os.Getenv("REDIS_PASSWORD")),
+		DB:                envInt("REDIS_DB", 0),
+		UseTLS:            envBool("REDIS_USE_TLS", false),
+		ConnectTimeout:    envDurationSeconds("REDIS_CONNECT_TIMEOUT_SEC", 5),
+		ReadTimeout:       envDurationSeconds("REDIS_RW_TIMEOUT_SEC", 3),
+		WriteTimeout:      envDurationSeconds("REDIS_RW_TIMEOUT_SEC", 3),
+		DefaultTTL:        envDurationSeconds("REDIS_DEFAULT_TTL_SEC", 60),
+		LocalCacheEnabled: envBool("REDIS_LOCAL_CACHE_ENABLED", true),
+		LocalCacheTTL:     envDurationSeconds("REDIS_LOCAL_CACHE_TTL_SEC", 15),
+	}
+
+	if strings.TrimSpace(cfg.Address) == "" {
+		return redisConfig{}, fmt.Errorf("REDIS_ADDR cannot be empty")
+	}
+	if cfg.ConnectTimeout <= 0 {
+		return redisConfig{}, fmt.Errorf("REDIS_CONNECT_TIMEOUT_SEC must be > 0")
+	}
+	if cfg.ReadTimeout <= 0 {
+		return redisConfig{}, fmt.Errorf("REDIS_RW_TIMEOUT_SEC must be > 0")
+	}
+	if cfg.WriteTimeout <= 0 {
+		return redisConfig{}, fmt.Errorf("REDIS_RW_TIMEOUT_SEC must be > 0")
+	}
+	if cfg.DefaultTTL < 0 {
+		return redisConfig{}, fmt.Errorf("REDIS_DEFAULT_TTL_SEC must be >= 0")
+	}
+	if cfg.LocalCacheTTL < 0 {
+		return redisConfig{}, fmt.Errorf("REDIS_LOCAL_CACHE_TTL_SEC must be >= 0")
+	}
+
+	return cfg, nil
+}
+
+func validateRedisConfig() error {
+	_, err := loadRedisConfig()
+	return err
+}
+
+func envOrDefault(key, fallback string) string {
+	value := strings.TrimSpace(os.Getenv(key))
+	if value == "" {
+		return fallback
+	}
+	return value
+}
+
+func envBool(key string, fallback bool) bool {
+	value := strings.TrimSpace(strings.ToLower(os.Getenv(key)))
+	switch value {
+	case "1", "true", "yes", "y", "on":
+		return true
+	case "0", "false", "no", "n", "off":
+		return false
+	default:
+		return fallback
+	}
+}
+
+func envInt(key string, fallback int) int {
+	value := strings.TrimSpace(os.Getenv(key))
+	if value == "" {
+		return fallback
+	}
+
+	parsed, err := strconv.Atoi(value)
+	if err != nil {
+		return fallback
+	}
+	return parsed
+}
+
+func envDurationSeconds(key string, fallback int) time.Duration {
+	seconds := envInt(key, fallback)
+	if seconds < 0 {
+		seconds = fallback
+	}
+	return time.Duration(seconds) * time.Second
+}

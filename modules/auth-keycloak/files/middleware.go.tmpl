@@ -1,0 +1,182 @@
+package auth_keycloak
+
+import (
+	"context"
+	"encoding/json"
+	"net/http"
+	"strings"
+)
+
+type introspectionContextKey struct{}
+
+type keycloakErrorResponse struct {
+	Error  string `json:"error"`
+	Detail string `json:"detail"`
+}
+
+type keycloakHealthResponse struct {
+	OK               bool   `json:"ok"`
+	Enabled          bool   `json:"enabled"`
+	IntrospectionURL string `json:"introspection_url"`
+	Detail           string `json:"detail"`
+	Error            string `json:"error,omitempty"`
+}
+
+func keycloakMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		cfg, err := loadKeycloakConfig()
+		if err != nil {
+			respondJSON(w, http.StatusServiceUnavailable, keycloakErrorResponse{
+				Error:  "keycloak_config_error",
+				Detail: err.Error(),
+			})
+			return
+		}
+
+		if !cfg.Enabled {
+			next.ServeHTTP(w, r)
+			return
+		}
+
+		if !isProtectedPath(r.URL.Path, cfg.ProtectedPrefixes) || isPublicPath(r.URL.Path, cfg.PublicPrefixes) {
+			next.ServeHTTP(w, r)
+			return
+		}
+
+		token := tokenFromAuthorization(r.Header.Get("Authorization"))
+		if token == "" {
+			respondJSON(w, http.StatusUnauthorized, keycloakErrorResponse{
+				Error:  "unauthorized",
+				Detail: "Bearer token is required.",
+			})
+			return
+		}
+
+		introspection, err := introspectToken(r.Context(), cfg, token)
+		if err != nil {
+			respondJSON(w, http.StatusUnauthorized, keycloakErrorResponse{
+				Error:  "unauthorized",
+				Detail: "Token introspection failed.",
+			})
+			return
+		}
+		if !introspection.Active {
+			respondJSON(w, http.StatusUnauthorized, keycloakErrorResponse{
+				Error:  "unauthorized",
+				Detail: "Token is not active.",
+			})
+			return
+		}
+		if !audienceAllowed(cfg.RequiredAudience, introspection.Audience) {
+			respondJSON(w, http.StatusForbidden, keycloakErrorResponse{
+				Error:  "forbidden",
+				Detail: "Token audience is not allowed.",
+			})
+			return
+		}
+
+		ctx := context.WithValue(r.Context(), introspectionContextKey{}, introspection)
+		next.ServeHTTP(w, r.WithContext(ctx))
+	})
+}
+
+func keycloakHealthHandler(w http.ResponseWriter, r *http.Request) {
+	cfg, err := loadKeycloakConfig()
+	if err != nil {
+		respondJSON(w, http.StatusServiceUnavailable, keycloakHealthResponse{
+			OK:               false,
+			Enabled:          false,
+			IntrospectionURL: "",
+			Detail:           "Failed to load Keycloak configuration.",
+			Error:            err.Error(),
+		})
+		return
+	}
+
+	if !cfg.Enabled {
+		respondJSON(w, http.StatusOK, keycloakHealthResponse{
+			OK:               true,
+			Enabled:          false,
+			IntrospectionURL: cfg.IntrospectionURL,
+			Detail:           "Keycloak auth middleware is installed but disabled.",
+		})
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(r.Context(), cfg.Timeout)
+	defer cancel()
+
+	ok, detail := probeIntrospection(ctx, cfg)
+	statusCode := http.StatusOK
+	if !ok {
+		statusCode = http.StatusServiceUnavailable
+	}
+
+	respondJSON(w, statusCode, keycloakHealthResponse{
+		OK:               ok,
+		Enabled:          true,
+		IntrospectionURL: cfg.IntrospectionURL,
+		Detail:           detail,
+	})
+}
+
+func isProtectedPath(path string, prefixes []string) bool {
+	return matchesAnyPathPrefix(path, prefixes)
+}
+
+func isPublicPath(path string, prefixes []string) bool {
+	return matchesAnyPathPrefix(path, prefixes)
+}
+
+func matchesAnyPathPrefix(path string, prefixes []string) bool {
+	trimmedPath := strings.TrimSpace(path)
+	if trimmedPath == "" {
+		trimmedPath = "/"
+	}
+	if !strings.HasPrefix(trimmedPath, "/") {
+		trimmedPath = "/" + trimmedPath
+	}
+
+	for _, prefix := range prefixes {
+		trimmedPrefix := strings.TrimSpace(prefix)
+		if trimmedPrefix == "" {
+			continue
+		}
+		if !strings.HasPrefix(trimmedPrefix, "/") {
+			trimmedPrefix = "/" + trimmedPrefix
+		}
+
+		if pathMatchesPrefix(trimmedPath, trimmedPrefix) {
+			return true
+		}
+	}
+	return false
+}
+
+func pathMatchesPrefix(path, prefix string) bool {
+	if prefix == "/" {
+		return path == "/"
+	}
+	if path == prefix {
+		return true
+	}
+	return strings.HasPrefix(path, prefix+"/")
+}
+
+func tokenFromAuthorization(authorization string) string {
+	trimmed := strings.TrimSpace(authorization)
+	parts := strings.SplitN(trimmed, " ", 2)
+	if len(parts) != 2 {
+		return ""
+	}
+	if !strings.EqualFold(parts[0], "Bearer") {
+		return ""
+	}
+	return strings.TrimSpace(parts[1])
+}
+
+func respondJSON(w http.ResponseWriter, statusCode int, payload any) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(statusCode)
+	_ = json.NewEncoder(w).Encode(payload)
+}

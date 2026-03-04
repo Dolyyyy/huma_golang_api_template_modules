@@ -1,0 +1,120 @@
+package auth_keycloak
+
+import (
+	"fmt"
+	"os"
+	"strconv"
+	"strings"
+	"time"
+)
+
+type keycloakConfig struct {
+	Enabled           bool
+	IntrospectionURL  string
+	ClientID          string
+	ClientSecret      string
+	Timeout           time.Duration
+	SkipTLSVerify     bool
+	RequiredAudience  string
+	ProtectedPrefixes []string
+	PublicPrefixes    []string
+}
+
+func loadKeycloakConfig() (keycloakConfig, error) {
+	cfg := keycloakConfig{
+		Enabled:           envBool("AUTH_KEYCLOAK_ENABLED", false),
+		IntrospectionURL:  envOrDefault("KEYCLOAK_INTROSPECTION_URL", "http://127.0.0.1:8080/realms/master/protocol/openid-connect/token/introspect"),
+		ClientID:          envOrDefault("KEYCLOAK_CLIENT_ID", "api"),
+		ClientSecret:      envOrDefault("KEYCLOAK_CLIENT_SECRET", "change-me"),
+		Timeout:           time.Duration(envInt("KEYCLOAK_TIMEOUT_SEC", 5)) * time.Second,
+		SkipTLSVerify:     envBool("KEYCLOAK_SKIP_TLS_VERIFY", false),
+		RequiredAudience:  strings.TrimSpace(os.Getenv("KEYCLOAK_REQUIRED_AUDIENCE")),
+		ProtectedPrefixes: envCSV("KEYCLOAK_PROTECTED_PATH_PREFIXES", "/api"),
+		PublicPrefixes:    envCSV("KEYCLOAK_PUBLIC_PATH_PREFIXES", "/,/docs,/openapi,/metrics,/auth/keycloak/health"),
+	}
+
+	if cfg.Timeout <= 0 {
+		return keycloakConfig{}, fmt.Errorf("KEYCLOAK_TIMEOUT_SEC must be > 0")
+	}
+	if len(cfg.ProtectedPrefixes) == 0 {
+		cfg.ProtectedPrefixes = []string{"/api"}
+	}
+	if len(cfg.PublicPrefixes) == 0 {
+		cfg.PublicPrefixes = []string{"/", "/docs", "/openapi", "/metrics", "/auth/keycloak/health"}
+	}
+
+	return cfg, nil
+}
+
+func validateKeycloakConfig() error {
+	cfg, err := loadKeycloakConfig()
+	if err != nil {
+		return err
+	}
+
+	if !cfg.Enabled {
+		return nil
+	}
+	if strings.TrimSpace(cfg.IntrospectionURL) == "" {
+		return fmt.Errorf("KEYCLOAK_INTROSPECTION_URL is required when AUTH_KEYCLOAK_ENABLED=true")
+	}
+	if strings.TrimSpace(cfg.ClientID) == "" {
+		return fmt.Errorf("KEYCLOAK_CLIENT_ID is required when AUTH_KEYCLOAK_ENABLED=true")
+	}
+	if strings.TrimSpace(cfg.ClientSecret) == "" {
+		return fmt.Errorf("KEYCLOAK_CLIENT_SECRET is required when AUTH_KEYCLOAK_ENABLED=true")
+	}
+
+	return nil
+}
+
+func envOrDefault(key, fallback string) string {
+	value := strings.TrimSpace(os.Getenv(key))
+	if value == "" {
+		return fallback
+	}
+	return value
+}
+
+func envBool(key string, fallback bool) bool {
+	value := strings.TrimSpace(strings.ToLower(os.Getenv(key)))
+	switch value {
+	case "1", "true", "yes", "y", "on":
+		return true
+	case "0", "false", "no", "n", "off":
+		return false
+	default:
+		return fallback
+	}
+}
+
+func envInt(key string, fallback int) int {
+	value := strings.TrimSpace(os.Getenv(key))
+	if value == "" {
+		return fallback
+	}
+
+	parsed, err := strconv.Atoi(value)
+	if err != nil {
+		return fallback
+	}
+	return parsed
+}
+
+func envCSV(key, fallback string) []string {
+	raw := strings.TrimSpace(os.Getenv(key))
+	if raw == "" {
+		raw = fallback
+	}
+
+	parts := strings.Split(raw, ",")
+	result := make([]string, 0, len(parts))
+	for _, part := range parts {
+		item := strings.TrimSpace(part)
+		if item == "" {
+			continue
+		}
+		result = append(result, item)
+	}
+	return result
+}

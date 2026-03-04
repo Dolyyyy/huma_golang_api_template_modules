@@ -1,0 +1,86 @@
+package mq_rabbitmq
+
+import (
+	"fmt"
+	"os"
+	"strconv"
+	"strings"
+	"time"
+)
+
+type rabbitMQConfig struct {
+	URL              string
+	Exchange         string
+	RoutingKey       string
+	Timeout          time.Duration
+	ContentType      string
+	Persistent       bool
+	AutoDeclareQueue bool
+	Queue            string
+}
+
+func loadRabbitMQConfig() (rabbitMQConfig, error) {
+	cfg := rabbitMQConfig{
+		URL:              envOrDefault("RABBITMQ_URL", "amqp://guest:guest@127.0.0.1:5672/"),
+		Exchange:         strings.TrimSpace(os.Getenv("RABBITMQ_EXCHANGE")),
+		RoutingKey:       envOrDefault("RABBITMQ_ROUTING_KEY", "test.queue"),
+		Timeout:          time.Duration(envInt("RABBITMQ_TIMEOUT_SEC", 5)) * time.Second,
+		ContentType:      envOrDefault("RABBITMQ_CONTENT_TYPE", "application/json"),
+		Persistent:       envBool("RABBITMQ_PERSISTENT", true),
+		AutoDeclareQueue: envBool("RABBITMQ_AUTO_DECLARE_QUEUE", true),
+		Queue:            envOrDefault("RABBITMQ_QUEUE", "test.queue"),
+	}
+
+	if strings.TrimSpace(cfg.URL) == "" {
+		return rabbitMQConfig{}, fmt.Errorf("RABBITMQ_URL cannot be empty")
+	}
+	if cfg.Timeout <= 0 {
+		return rabbitMQConfig{}, fmt.Errorf("RABBITMQ_TIMEOUT_SEC must be > 0")
+	}
+	if strings.TrimSpace(cfg.RoutingKey) == "" {
+		return rabbitMQConfig{}, fmt.Errorf("RABBITMQ_ROUTING_KEY cannot be empty")
+	}
+	if cfg.AutoDeclareQueue && strings.TrimSpace(cfg.Queue) == "" {
+		return rabbitMQConfig{}, fmt.Errorf("RABBITMQ_QUEUE cannot be empty when RABBITMQ_AUTO_DECLARE_QUEUE=true")
+	}
+
+	return cfg, nil
+}
+
+func validateRabbitMQConfig() error {
+	_, err := loadRabbitMQConfig()
+	return err
+}
+
+func envOrDefault(key, fallback string) string {
+	value := strings.TrimSpace(os.Getenv(key))
+	if value == "" {
+		return fallback
+	}
+	return value
+}
+
+func envBool(key string, fallback bool) bool {
+	value := strings.TrimSpace(strings.ToLower(os.Getenv(key)))
+	switch value {
+	case "1", "true", "yes", "y", "on":
+		return true
+	case "0", "false", "no", "n", "off":
+		return false
+	default:
+		return fallback
+	}
+}
+
+func envInt(key string, fallback int) int {
+	value := strings.TrimSpace(os.Getenv(key))
+	if value == "" {
+		return fallback
+	}
+
+	parsed, err := strconv.Atoi(value)
+	if err != nil {
+		return fallback
+	}
+	return parsed
+}

@@ -6,6 +6,12 @@
     "package": "internal/modules/auth_jwt"
   },
   {
+    "id": "auth-keycloak",
+    "name": "Keycloak auth middleware",
+    "description": "Validate Bearer tokens against a Keycloak introspection endpoint.",
+    "package": "internal/modules/auth_keycloak"
+  },
+  {
     "id": "auth-token",
     "name": "API token auth",
     "description": "Protect API routes using X-API-Token or Authorization: Bearer <token>.",
@@ -16,6 +22,12 @@
     "name": "BGP.tools lookup",
     "description": "Load BGP.tools prefix/ASN datasets and expose IP/ASN lookup endpoints with RAM+disk cache.",
     "package": "internal/modules/bgptools"
+  },
+  {
+    "id": "cache-redis",
+    "name": "Redis cache",
+    "description": "Add Redis cache endpoints with optional in-memory L1 cache.",
+    "package": "internal/modules/cache_redis"
   },
   {
     "id": "cors",
@@ -58,6 +70,12 @@
     "name": "Prometheus metrics",
     "description": "Expose /metrics for Prometheus scraping.",
     "package": "internal/modules/metrics_prometheus"
+  },
+  {
+    "id": "mq-rabbitmq",
+    "name": "RabbitMQ connector",
+    "description": "Add RabbitMQ ping and publish test endpoints.",
+    "package": "internal/modules/mq_rabbitmq"
   },
   {
     "id": "rate-limit",

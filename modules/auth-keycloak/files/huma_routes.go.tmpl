@@ -1,0 +1,136 @@
+package auth_keycloak
+
+import (
+	"net/http"
+	"strings"
+
+	"github.com/danielgtaylor/huma/v2"
+)
+
+const keycloakBearerSecurityScheme = "keycloakBearerAuth"
+
+func registerHumaRoutes(api huma.API) {
+	if api == nil || api.OpenAPI() == nil {
+		return
+	}
+
+	spec := api.OpenAPI()
+	ensureKeycloakSecurityScheme(spec)
+	addKeycloakHealthOperation(spec)
+
+	cfg, err := loadKeycloakConfig()
+	if err != nil || !cfg.Enabled {
+		return
+	}
+
+	applyKeycloakSecurityHook(spec, cfg)
+	applyKeycloakSecurityToExistingOperations(spec, cfg)
+}
+
+func ensureKeycloakSecurityScheme(spec *huma.OpenAPI) {
+	if spec.Components == nil {
+		spec.Components = &huma.Components{}
+	}
+	if spec.Components.SecuritySchemes == nil {
+		spec.Components.SecuritySchemes = map[string]*huma.SecurityScheme{}
+	}
+	if _, exists := spec.Components.SecuritySchemes[keycloakBearerSecurityScheme]; exists {
+		return
+	}
+
+	spec.Components.SecuritySchemes[keycloakBearerSecurityScheme] = &huma.SecurityScheme{
+		Type:         "http",
+		Scheme:       "bearer",
+		BearerFormat: "JWT",
+		Description:  "Bearer token validated with Keycloak token introspection.",
+	}
+}
+
+func addKeycloakHealthOperation(spec *huma.OpenAPI) {
+	if spec.Paths != nil {
+		if path := spec.Paths["/auth/keycloak/health"]; path != nil && path.Get != nil {
+			return
+		}
+	}
+
+	spec.AddOperation(&huma.Operation{
+		OperationID: "auth-keycloak-health",
+		Method:      http.MethodGet,
+		Path:        "/auth/keycloak/health",
+		Summary:     "Keycloak auth middleware endpoint",
+		Tags:        []string{"auth-keycloak"},
+		Responses: map[string]*huma.Response{
+			"200": {Description: "OK"},
+			"503": {Description: "Service Unavailable"},
+		},
+	})
+}
+
+func applyKeycloakSecurityHook(spec *huma.OpenAPI, cfg keycloakConfig) {
+	spec.OnAddOperation = append(spec.OnAddOperation, func(_ *huma.OpenAPI, op *huma.Operation) {
+		if op == nil {
+			return
+		}
+		applyKeycloakSecurityToOperation(op.Path, op, cfg)
+	})
+}
+
+func applyKeycloakSecurityToExistingOperations(spec *huma.OpenAPI, cfg keycloakConfig) {
+	for path, pathItem := range spec.Paths {
+		forEachOperation(pathItem, func(operation *huma.Operation) {
+			applyKeycloakSecurityToOperation(path, operation, cfg)
+		})
+	}
+}
+
+func applyKeycloakSecurityToOperation(path string, operation *huma.Operation, cfg keycloakConfig) {
+	if operation == nil {
+		return
+	}
+
+	normalizedPath := strings.TrimSpace(path)
+	if normalizedPath == "" {
+		normalizedPath = strings.TrimSpace(operation.Path)
+	}
+	if normalizedPath == "" {
+		return
+	}
+
+	if !isProtectedPath(normalizedPath, cfg.ProtectedPrefixes) {
+		return
+	}
+	if isPublicPath(normalizedPath, cfg.PublicPrefixes) {
+		return
+	}
+	if len(operation.Security) > 0 {
+		return
+	}
+
+	operation.Security = []map[string][]string{
+		{keycloakBearerSecurityScheme: []string{}},
+	}
+}
+
+func forEachOperation(pathItem *huma.PathItem, visit func(*huma.Operation)) {
+	if pathItem == nil {
+		return
+	}
+
+	operations := []*huma.Operation{
+		pathItem.Get,
+		pathItem.Post,
+		pathItem.Put,
+		pathItem.Patch,
+		pathItem.Delete,
+		pathItem.Head,
+		pathItem.Options,
+		pathItem.Trace,
+	}
+
+	for _, operation := range operations {
+		if operation == nil {
+			continue
+		}
+		visit(operation)
+	}
+}

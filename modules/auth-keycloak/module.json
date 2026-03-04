@@ -1,0 +1,50 @@
+{
+  "id": "auth-keycloak",
+  "name": "Keycloak auth middleware",
+  "description": "Validate Bearer tokens against a Keycloak introspection endpoint.",
+  "package": "internal/modules/auth_keycloak",
+  "defaults": {
+    "AUTH_KEYCLOAK_ENABLED": "false",
+    "KEYCLOAK_INTROSPECTION_URL": "http://127.0.0.1:8080/realms/master/protocol/openid-connect/token/introspect",
+    "KEYCLOAK_CLIENT_ID": "api",
+    "KEYCLOAK_CLIENT_SECRET": "change-me",
+    "KEYCLOAK_TIMEOUT_SEC": "5",
+    "KEYCLOAK_SKIP_TLS_VERIFY": "false",
+    "KEYCLOAK_REQUIRED_AUDIENCE": "",
+    "KEYCLOAK_PROTECTED_PATH_PREFIXES": "/api",
+    "KEYCLOAK_PUBLIC_PATH_PREFIXES": "/,/docs,/openapi,/metrics,/auth/keycloak/health"
+  },
+  "cleanup_env_keys": [
+    "AUTH_KEYCLOAK_ENABLED",
+    "KEYCLOAK_INTROSPECTION_URL",
+    "KEYCLOAK_CLIENT_ID",
+    "KEYCLOAK_CLIENT_SECRET",
+    "KEYCLOAK_TIMEOUT_SEC",
+    "KEYCLOAK_SKIP_TLS_VERIFY",
+    "KEYCLOAK_REQUIRED_AUDIENCE",
+    "KEYCLOAK_PROTECTED_PATH_PREFIXES",
+    "KEYCLOAK_PUBLIC_PATH_PREFIXES"
+  ],
+  "files": [
+    {
+      "source": "files/module.go.tmpl",
+      "destination": "internal/modules/auth_keycloak/module.go"
+    },
+    {
+      "source": "files/config.go.tmpl",
+      "destination": "internal/modules/auth_keycloak/config.go"
+    },
+    {
+      "source": "files/client.go.tmpl",
+      "destination": "internal/modules/auth_keycloak/client.go"
+    },
+    {
+      "source": "files/middleware.go.tmpl",
+      "destination": "internal/modules/auth_keycloak/middleware.go"
+    },
+    {
+      "source": "files/huma_routes.go.tmpl",
+      "destination": "internal/modules/auth_keycloak/huma_routes.go"
+    }
+  ]
+}

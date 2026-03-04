@@ -1,0 +1,23 @@
+package auth_keycloak
+
+import (
+	"github.com/go-chi/chi/v5"
+
+	"{{ .ProjectModulePath }}/internal/modulekit"
+)
+
+func init() {
+	modulekit.Register(modulekit.Definition{
+		ID:          "auth-keycloak",
+		Name:        "Keycloak auth middleware",
+		Description: "Validate Bearer tokens against a Keycloak introspection endpoint.",
+		Validate:    validateKeycloakConfig,
+		Middleware:  keycloakMiddleware,
+		Routes:      registerRoutes,
+		HumaRoutes:  registerHumaRoutes,
+	})
+}
+
+func registerRoutes(router chi.Router) {
+	router.Get("/auth/keycloak/health", keycloakHealthHandler)
+}

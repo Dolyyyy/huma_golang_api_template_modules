@@ -78,12 +78,15 @@ Each installable module must live under `modules/<id>/`.
 Current modules:
 
 - `auth-jwt`
+- `auth-keycloak`
 - `auth-token`
 - `bgptools`
+- `cache-redis`
 - `cors`
 - `http-timeout`
 - `mail-smtp`
 - `metrics-prometheus`
+- `mq-rabbitmq`
 - `rate-limit`
 - `request-id`
 - `scheduler-cron`

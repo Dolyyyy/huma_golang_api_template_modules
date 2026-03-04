@@ -1,0 +1,46 @@
+{
+  "id": "cache-redis",
+  "name": "Redis cache",
+  "description": "Add Redis cache endpoints with optional in-memory L1 cache.",
+  "package": "internal/modules/cache_redis",
+  "defaults": {
+    "REDIS_ADDR": "127.0.0.1:6379",
+    "REDIS_PASSWORD": "",
+    "REDIS_DB": "0",
+    "REDIS_USE_TLS": "false",
+    "REDIS_CONNECT_TIMEOUT_SEC": "5",
+    "REDIS_RW_TIMEOUT_SEC": "3",
+    "REDIS_DEFAULT_TTL_SEC": "60",
+    "REDIS_LOCAL_CACHE_ENABLED": "true",
+    "REDIS_LOCAL_CACHE_TTL_SEC": "15"
+  },
+  "cleanup_env_keys": [
+    "REDIS_ADDR",
+    "REDIS_PASSWORD",
+    "REDIS_DB",
+    "REDIS_USE_TLS",
+    "REDIS_CONNECT_TIMEOUT_SEC",
+    "REDIS_RW_TIMEOUT_SEC",
+    "REDIS_DEFAULT_TTL_SEC",
+    "REDIS_LOCAL_CACHE_ENABLED",
+    "REDIS_LOCAL_CACHE_TTL_SEC"
+  ],
+  "files": [
+    {
+      "source": "files/module.go.tmpl",
+      "destination": "internal/modules/cache_redis/module.go"
+    },
+    {
+      "source": "files/config.go.tmpl",
+      "destination": "internal/modules/cache_redis/config.go"
+    },
+    {
+      "source": "files/service.go.tmpl",
+      "destination": "internal/modules/cache_redis/service.go"
+    },
+    {
+      "source": "files/handlers.go.tmpl",
+      "destination": "internal/modules/cache_redis/handlers.go"
+    }
+  ]
+}
